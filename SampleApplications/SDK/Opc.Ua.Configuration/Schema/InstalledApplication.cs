@@ -162,12 +162,6 @@ namespace Opc.Ua.Configuration
         public ushort LifeTimeInMonths { get; set; }
 
         /// <summary>
-        /// Who has access to the critical files.
-        /// </summary>
-        [DataMember(IsRequired = false, Order = 14)]
-        public ApplicationAccessRuleCollection AccessRules { get; set; }
-
-        /// <summary>
         /// The trace configuration for the installed process.
         /// </summary>
         [DataMember(IsRequired = false, Order = 15)]

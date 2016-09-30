@@ -87,39 +87,6 @@ namespace Opc.Ua
 
         #region Public Methods
         /// <summary>
-        /// Detects the type of store represented by the path.
-        /// </summary>
-        public static string DetermineStoreType(string storePath)
-        {
-            if (String.IsNullOrEmpty(storePath))
-            {
-                return CertificateStoreType.Directory;
-            }
-
-            if (storePath.StartsWith("LocalMachine\\", StringComparison.OrdinalIgnoreCase))
-            {
-                return CertificateStoreType.Windows;
-            }
-
-            if (storePath.StartsWith("CurrentUser\\", StringComparison.OrdinalIgnoreCase))
-            {
-                return CertificateStoreType.Windows;
-            }
-
-            if (storePath.StartsWith("User\\", StringComparison.OrdinalIgnoreCase))
-            {
-                return CertificateStoreType.Windows;
-            }
-
-            if (storePath.StartsWith("Service\\", StringComparison.OrdinalIgnoreCase))
-            {
-                return CertificateStoreType.Windows;
-            }
-
-            return CertificateStoreType.Directory;
-        }
-
-        /// <summary>
         /// Returns an object that can be used to access the store.
         /// </summary>
         public static ICertificateStore CreateStore(string storeType)
@@ -138,6 +105,11 @@ namespace Opc.Ua
                     store = new DirectoryCertificateStore();
                     break;
                 }
+                case CertificateStoreType.TPM:
+                {
+                    store = new TPMCertificateStore();
+                    break;
+                }
             }
             return store;
         }
@@ -151,18 +123,6 @@ namespace Opc.Ua
             store.Open(this.StorePath);
             return store;
         }
-
-        /// <summary>
-        /// Opens the store.
-        /// </summary>
-        /// <param name="path">The path.</param>
-        /// <returns>The store.</returns>
-        public static ICertificateStore OpenStore(string path)
-        {
-            ICertificateStore store = CertificateStoreIdentifier.CreateStore(CertificateStoreIdentifier.DetermineStoreType(path));
-            store.Open(path);
-            return store;
-        }
         #endregion
     }
 
@@ -173,9 +133,9 @@ namespace Opc.Ua
     public static class CertificateStoreType
     {
         /// <summary>
-        /// A windows certificate store.
+        /// A TPM chip-based certificate store.
         /// </summary>
-        public const string Windows = "Windows";
+        public const string TPM = "TPM";
 
         /// <summary>
         /// A directory certificate store.

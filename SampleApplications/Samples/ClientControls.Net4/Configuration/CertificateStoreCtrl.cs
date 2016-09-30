@@ -56,7 +56,7 @@ namespace Opc.Ua.Client.Controls
             InitializeComponent();
 
             StoreTypeCB.Items.Add(CertificateStoreType.Directory);
-            StoreTypeCB.Items.Add(CertificateStoreType.Windows);
+            StoreTypeCB.Items.Add(CertificateStoreType.TPM);
             StoreTypeCB.SelectedIndex = 0;
         }
         #endregion
@@ -170,11 +170,9 @@ namespace Opc.Ua.Client.Controls
                 stores.Add(Path.DirectorySeparatorChar + "OPC Foundation" + Path.DirectorySeparatorChar + "CertificateStores" + Path.DirectorySeparatorChar + "RejectedCertificates");
             }
 
-            if (CertificateStoreType.Windows == storeType)
+            if (CertificateStoreType.TPM == storeType)
             {
-                stores.Add("LocalMachine\\My");
-                stores.Add("LocalMachine\\UA Applications");
-                stores.Add("LocalMachine\\UA Certificate Authorities");
+                stores.Add("TPM");
             }
 
             return stores;
@@ -244,7 +242,7 @@ namespace Opc.Ua.Client.Controls
                     storePath = dialog.SelectedPath;
                 }
 
-                if (storeType == CertificateStoreType.Windows)
+                if (storeType == CertificateStoreType.TPM)
                 {
                     CertificateStoreIdentifier store = new CertificateStoreTreeDlg().ShowDialog(null);
 

@@ -173,7 +173,17 @@ namespace Opc.Ua
                     return m_certificate;
                 }
             }
-            
+
+            if (this.StoreType == CertificateStoreType.TPM)
+            {
+                using (TPMCertificateStore store = new TPMCertificateStore())
+                {
+                    store.Open(this.StorePath);
+                    m_certificate = store.LoadPrivateKey(this.Thumbprint, this.SubjectName, password);
+                    return m_certificate;
+                }
+            }
+
             return await Find(true);
         }
 
@@ -738,40 +748,6 @@ namespace Opc.Ua
         }
 
         /// <summary>
-        /// Whether the store supports access control.
-        /// </summary>
-        public bool SupportsAccessControl
-        {
-            get { return false; }
-        }
-
-        /// <summary>
-        /// Returns the access rules that are currently applied to the store.
-        /// </summary>
-        /// <returns>The list of access rules.</returns>
-        public IList<ApplicationAccessRule> GetAccessRules()
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
-        /// Sets the access rules that are currently applied to the store.
-        /// </summary>
-        /// <param name="rules">The rules.</param>
-        /// <param name="replaceExisting">if set to <c>true</c> the existing access rules are replaced.</param>
-        public void SetAccessRules(IList<ApplicationAccessRule> rules, bool replaceExisting)
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
-        /// Whether the store supports access control on certificates.
-        /// </summary>
-        public bool SupportsCertificateAccessControl
-        {
-            get { return false; }
-        }
-        /// <summary>
         /// Whether the store supports private keys.
         /// </summary>
         /// <value></value>
@@ -786,27 +762,6 @@ namespace Opc.Ua
         public string GetPrivateKeyFilePath(string thumbprint)
         {
             return null;
-        }
-
-        /// <summary>
-        /// Returns the access rules that are currently applied to the certficate's private key.
-        /// </summary>
-        /// <param name="thumbprint">The thumbprint.</param>
-        /// <returns>The access rules.</returns>
-        public IList<ApplicationAccessRule> GetAccessRules(string thumbprint)
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
-        /// Sets the access rules that are currently applied to the certficate's private key.
-        /// </summary>
-        /// <param name="thumbprint">The thumbprint.</param>
-        /// <param name="rules">The rules.</param>
-        /// <param name="replaceExisting">if set to <c>true</c> the existing access rules are replaced.</param>
-        public void SetAccessRules(string thumbprint, IList<ApplicationAccessRule> rules, bool replaceExisting)
-        {
-            throw new NotImplementedException();
         }
 
         /// <summary>

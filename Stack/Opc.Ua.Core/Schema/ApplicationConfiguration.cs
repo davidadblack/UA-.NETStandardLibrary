@@ -1921,18 +1921,12 @@ namespace Opc.Ua
         /// The type of certificate store.
         /// </summary>
         /// <value>
-        /// If the StoreName is not empty, the CertificateStoreType.Windows is returned, otherwise the StoreType is returned.
         /// </value>
         [DataMember(IsRequired = false, EmitDefaultValue = false, Order = 0)]
         public string StoreType
         {
             get
             {
-                if (!String.IsNullOrEmpty(m_storeName))
-                {
-                    return CertificateStoreType.Windows;
-                }
-
                 return m_storeType;
             }
 
@@ -1987,19 +1981,12 @@ namespace Opc.Ua
                 {
                     if (String.IsNullOrEmpty(m_storeType))
                     {
-                        if (m_storePath.StartsWith("LocalMachine", StringComparison.CurrentCultureIgnoreCase) || m_storePath.StartsWith("CurrentUser", StringComparison.CurrentCultureIgnoreCase))
-                        {
-                            m_storeType = CertificateStoreType.Windows;
-                        }
-                        else
-                        {
-                            m_storeType = CertificateStoreType.Directory;
-                        }
+                        m_storeType = CertificateStoreType.Directory;
                     }
                 }
             }
         }
-
+    
         /// <summary>
         /// The name of the certifcate store that contains the trusted certficates. 
         /// </summary>
@@ -2199,11 +2186,6 @@ namespace Opc.Ua
         {
             get
             {
-                if (!String.IsNullOrEmpty(m_storeName))
-                {
-                    return CertificateStoreType.Windows;
-                }
-
                 return m_storeType;
             }
 
@@ -2254,14 +2236,7 @@ namespace Opc.Ua
                 {
                     if (String.IsNullOrEmpty(m_storeType))
                     {
-                        if (m_storePath.StartsWith("LocalMachine", StringComparison.CurrentCultureIgnoreCase) || m_storePath.StartsWith("CurrentUser", StringComparison.CurrentCultureIgnoreCase))
-                        {
-                            m_storeType = CertificateStoreType.Windows;
-                        }
-                        else
-                        {
-                            m_storeType = CertificateStoreType.Directory;
-                        }
+                        m_storeType = CertificateStoreType.Directory;
                     }
                 }
             }
@@ -2873,135 +2848,6 @@ namespace Opc.Ua
         /// </summary>    
         [EnumMember()]
         HDA
-    }
-    #endregion
-    
-    #region ApplicationAccessRule Class
-    /// <summary>
-    /// An access rule for an application.
-    /// </summary>
-    [DataContract(Namespace = Namespaces.OpcUaConfig)]
-    public partial class ApplicationAccessRule
-    {
-        #region Public Properties
-        /// <summary>
-        /// The type of access rule.
-        /// </summary>
-        [DataMember(Order = 1)]
-        public AccessControlType RuleType
-        {
-            get { return m_ruleType; }
-            set { m_ruleType = value; }
-        }
-
-        /// <summary>
-        /// The access right affected by the rule.
-        /// </summary>
-        [DataMember(Order = 2)]
-        public ApplicationAccessRight Right
-        {
-            get { return m_right; }
-            set { m_right = value; }
-        }
-
-        /// <summary>
-        /// The name of the NT account principal which the access rule applies to.
-        /// </summary>
-        [DataMember(Order = 3)]
-        public string IdentityName
-        {
-            get
-            {
-                return m_identityName;
-            }
-
-            set { m_identityName = value; }
-        }
-        #endregion
-
-        #region Private Fields
-        private AccessControlType m_ruleType;
-        private ApplicationAccessRight m_right;
-        private String m_identityName;
-        #endregion
-    }
-    #endregion
-    #region AccessControlType Enumeration
-    /// <summary>
-    /// The rights to an application that may be granted to the user.
-    /// </summary>
-    [DataContract(Namespace = Namespaces.OpcUaConfig)]
-    public enum AccessControlType
-    {
-        /// <summary>
-        /// Allows access to the specified account.
-        /// </summary>
-        [EnumMember]
-        Allow = 0x0,
-
-        /// <summary>
-        /// Denies access to the specified account.
-        /// </summary>
-        [EnumMember]
-        Deny = 0x1
-    }
-    #endregion
-
-    #region ApplicationAccessRight Enumeration
-    /// <summary>
-    /// The rights to an application that may be granted to the user.
-    /// </summary>
-    [DataContract(Namespace = Namespaces.OpcUaConfig)]
-    public enum ApplicationAccessRight
-    {
-        /// <summary>
-        /// The account has no access.
-        /// </summary>
-        [EnumMember]
-        None = 0x0,
-
-        /// <summary>
-        /// The account can run the application.
-        /// </summary>
-        [EnumMember]
-        Run = 0x1,
-
-        /// <summary>
-        /// The account can update the application configuration.
-        /// </summary>
-        [EnumMember]
-        Update = 0x2,
-
-        /// <summary>
-        /// The account can change the application access rights.
-        /// </summary>
-        [EnumMember]
-        Configure = 0x3
-    }
-    #endregion
-    #region ApplicationAccessRuleCollection Class
-    /// <summary>
-    /// A collection of ApplicationAccessRule objects.
-    /// </summary>
-    [CollectionDataContract(Name = "ListOfApplicationAccessRule", Namespace = Namespaces.OpcUaConfig, ItemName = "ApplicationAccessRule")]
-    public partial class ApplicationAccessRuleCollection : List<ApplicationAccessRule>
-    {
-        #region Constructors
-        /// <summary>
-        /// Initializes the collection with default values.
-        /// </summary>
-        public ApplicationAccessRuleCollection() { }
-
-        /// <summary>
-        /// Initializes the collection with an initial capacity.
-        /// </summary>
-        public ApplicationAccessRuleCollection(int capacity) : base(capacity) { }
-
-        /// <summary>
-        /// Initializes the collection with another collection.
-        /// </summary>
-        public ApplicationAccessRuleCollection(IEnumerable<ApplicationAccessRule> collection) : base(collection) { }
-        #endregion
     }
     #endregion
 }

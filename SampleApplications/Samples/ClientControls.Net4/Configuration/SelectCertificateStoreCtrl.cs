@@ -78,11 +78,10 @@ namespace Opc.Ua.Client.Controls
         private void BrowseBTN_Click(object sender, EventArgs e)
         {
             CertificateStoreIdentifier store = new CertificateStoreIdentifier();
-            store.StoreType = CertificateStoreIdentifier.DetermineStoreType(CertificateStoreControl.Text);
+            store.StoreType = CertificateStoreType.Directory;
             store.StorePath = CertificateStoreControl.Text;
 
             store = new CertificateStoreDlg().ShowDialog(store);
-
             if (store == null)
             {
                 return;

@@ -233,24 +233,7 @@ namespace Opc.Ua
             }
         }
 
-        /// <summary cref="ICertificateStore.GetPrivateKeyFilePath" />
-        public string GetPublicKeyFilePath(string thumbprint)
-        {
-            Entry entry = Find(thumbprint);
-
-            if (entry == null)
-            {
-                return null;
-            }
-
-            if (entry.CertificateFile == null || !entry.CertificateFile.Exists)
-            {
-                return null;
-            }
-
-            return entry.CertificateFile.FullName;
-        }
-
+     
         /// <summary cref="ICertificateStore.GetPrivateKeyFilePath" />
         public string GetPrivateKeyFilePath(string thumbprint)
         {
@@ -616,7 +599,7 @@ namespace Opc.Ua
         /// <summary>
         /// Reads the current contents of the directory from disk.
         /// </summary>
-        private IDictionary<string, Entry> Load(string thumbprint)
+        protected IDictionary<string, Entry> Load(string thumbprint)
         {
             lock (m_lock)
             {
@@ -852,21 +835,20 @@ namespace Opc.Ua
 #endregion
 
 #region Private Fields
-        private class Entry
+        protected class Entry
         {
             public FileInfo CertificateFile;
             public X509Certificate2 Certificate;
             public FileInfo PrivateKeyFile;
             public X509Certificate2 CertificateWithPrivateKey;
         }
-#endregion
 
-#region Private Fields
-        private object m_lock = new object();
+        protected object m_lock = new object();
+
         private DirectoryInfo m_directory;
         private DirectoryInfo m_certificateSubdir;
         private DirectoryInfo m_privateKeySubdir;
-        private Dictionary<string, Entry> m_certificates;
+        protected Dictionary<string, Entry> m_certificates;
         private DateTime m_lastDirectoryCheck;
 #endregion
     }

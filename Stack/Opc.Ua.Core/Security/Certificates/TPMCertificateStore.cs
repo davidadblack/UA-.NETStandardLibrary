@@ -11,12 +11,11 @@
 */
 
 using System;
-using System.Text;
-using System.Collections.Generic;
-using System.IO;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
+using System.Text;
+using System.Collections.Generic;
 using Tpm2Lib;
 
 namespace Opc.Ua
@@ -24,187 +23,83 @@ namespace Opc.Ua
     /// <summary>
     /// Provides access to a simple file based certificate store.
     /// </summary>
-    public class TPMCertificateStore : ICertificateStore
+    public class TPMCertificateStore : DirectoryCertificateStore
     {
-        public TPMCertificateStore()
-        {
-            m_certificates = new Dictionary<string, X509Certificate2>();
-        }
-        
-        public void Dispose()
-        {
-            Dispose(true);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                Close();
-            }
-        }
-        
-        public void Open(string location)
+        public new void Open(string location)
         {
             lock (m_lock)
             {
+                base.Open(location);
                 m_tpmDevice.Connect();
                 m_tpm = new Tpm2(m_tpmDevice);
             }
         }
 
-        public void Close()
+        public new void Close()
         {
             lock (m_lock)
             {
                 m_tpm.Dispose();
-                m_certificates.Clear();
+                base.Close();
             }
         }
 
-        public Task<X509Certificate2Collection> Enumerate()
-        {
-            lock (m_lock)
-            {
-                IDictionary<string, X509Certificate2> certificatesInStore = Load(null);
-
-                X509Certificate2Collection certificates = new X509Certificate2Collection();
-                foreach (X509Certificate2 entry in certificatesInStore.Values)
-                {
-                    certificates.Add(entry);
-                }
-
-                return Task.FromResult(certificates);
-            }
-        }
-
-        public Task Add(X509Certificate2 certificate)
+        public new Task Add(X509Certificate2 certificate)
         {
             if (certificate == null) throw new ArgumentNullException("certificate");
          
             lock (m_lock)
             {
-                byte[] data = null;
+                // Create a handle based on the hash of the cert thumbprint
+                TpmHandle nvHandle = TpmHandle.NV(certificate.Thumbprint.GetHashCode());
 
-                // check for existing certificate
-                X509Certificate2 entry = Find(certificate.Thumbprint);
+                // Clean up the slot
+                m_tpm[m_ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
 
-                if (entry != null)
-                {
-                    throw new ArgumentException("A certificate with the same thumbprint is already in the store.");
-                }
+                // Define a slot for the thumbprint
+                AuthValue nvAuth = AuthValue.FromRandom(8);
+                m_tpm[m_ownerAuth].NvDefineSpace(TpmHandle.RhOwner, nvAuth, new NvPublic(nvHandle, TpmAlgId.Sha1, NvAttr.Authread | NvAttr.Authwrite, new byte[0], (ushort) certificate.Thumbprint.ToCharArray().Length));
 
-                if (certificate.HasPrivateKey)
-                {
-                    data = certificate.Export(X509ContentType.Pkcs12, String.Empty);
-                }
-                else
-                {
-                    data = certificate.RawData;
-                }
-
-                // build key pair and store in NV storage on TPM.
-                // TODO
+                // Write the thumbprint
+                m_tpm[nvAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
             }
 
-            return Task.CompletedTask;
+            return base.Add(certificate);
         }
 
-        public Task<bool> Delete(string thumbprint)
+        public new Task<bool> Delete(string thumbprint)
         {
             lock (m_lock)
             {
-                bool found = false;
-                X509Certificate2 entry = Find(thumbprint);
-                if (entry != null)
-                {
-                    //TODO: Generate keypair and delete from NV storage
-                    found = true;
-                }
+                // Create a handle based on the hash of the cert thumbprint
+                TpmHandle nvHandle = TpmHandle.NV(thumbprint.GetHashCode());
 
-                return Task.FromResult(found);
+                // Delete hash of thumbprint from NV storage
+                m_tpm[m_ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
             }
+
+            return base.Delete(thumbprint);
         }
 
-        public Task<X509Certificate2Collection> FindByThumbprint(string thumbprint)
+        public new string GetPrivateKeyFilePath(string thumbprint)
         {
-            X509Certificate2Collection certificates = new X509Certificate2Collection();
-
-            lock (m_lock)
-            {
-                X509Certificate2 entry = Find(thumbprint);
-                if (entry != null)
-                {
-                    certificates.Add(entry);
-                }
-
-                return Task.FromResult(certificates);
-            }
-        }
-        
-        public bool SupportsPrivateKeys
-        {
-            get
-            {
-                return true;
-            }
+           return "TPM";
         }
 
-        public string GetPrivateKeyFilePath(string thumbprint)
+        public new X509Certificate2 LoadPrivateKey(string thumbprint, string subjectName, string password)
         {
-            X509Certificate2 entry = Find(thumbprint);
-
-            if (entry == null)
-            {
-                return null;
-            }
-
-            if (!entry.HasPrivateKey)
-            {
-                return null;
-            }
-
-            return entry.Subject;
-        }
-
-        public string[] GetCrlFilePaths(string thumbprint)
-        {
-            List<string> filePaths = new List<string>();
-
-            X509Certificate2 entry = Find(thumbprint);
-
-            DirectoryInfo info = new DirectoryInfo(Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + "crl");
-
-            foreach (FileInfo file in info.GetFiles("*.crl"))
-            {
-                X509CRL crl = null;
-
-                try
-                {
-                    crl = new X509CRL(file.FullName);
-                }
-                catch (Exception e)
-                {
-                    Utils.Trace(e, "Could not parse CRL file.");
-                    continue;
-                }
-
-                if (!Utils.CompareDistinguishedName(crl.Issuer, entry.Subject))
-                {
-                    continue;
-                }
-
-                filePaths.Add(file.FullName);
-            }
-
-            return filePaths.ToArray();
-        }
-
-        public X509Certificate2 LoadPrivateKey(string thumbprint, string subjectName, string password)
-        {
-            byte[] rawData = new byte[256];
             try
             {
+                // Create a handle based on the hash of the cert thumbprint
+                TpmHandle nvHandle = TpmHandle.NV(thumbprint.GetHashCode());
+
+                // Read size of cert from NV storage
+                byte[] certSizeBlob = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, 4, 0);
+                int certSize = BitConverter.ToInt32(certSizeBlob, 0);
+
+                // Load cert from NV storage
+                byte[] rawData = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, (ushort) certSize, 4);
+
                 X509Certificate2 certificate = null;
                 RSA rsa = null;
                 try
@@ -242,294 +137,46 @@ namespace Opc.Ua
             return null;
         }
 
-        public bool SupportsCRLs { get { return true; } }
-
-        public StatusCode IsRevoked(X509Certificate2 issuer, X509Certificate2 certificate)
+        private new IDictionary<string, Entry> Load(string thumbprint)
         {
-            if (issuer == null)
+            IDictionary<string, Entry> certs = base.Load(thumbprint);
+
+            foreach(KeyValuePair<string, Entry> pair in certs)
             {
-                throw new ArgumentNullException("issuer");
-            }
+                // Create a handle based on the hash of the cert thumbprint
+                TpmHandle nvHandle = TpmHandle.NV(pair.Key.GetHashCode());
 
-            if (certificate == null)
-            {
-                throw new ArgumentNullException("certificate");
-            }
+                // Get byte array of hash
+                byte[] original = Encoding.UTF8.GetBytes(pair.Key.ToCharArray());
 
-            // check for CRL.
-            DirectoryInfo info = new DirectoryInfo(Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + "crl");
+                // Load hash from NV storage
+                byte[] rawData = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, (ushort) original.Length, 0);
 
-            if (info.Exists)
-            {
-                bool crlExpired = true;
-
-                foreach (FileInfo file in info.GetFiles("*.crl"))
+                if (!original.IsEqual(rawData))
                 {
-                    X509CRL crl = null;
-
-                    try
-                    {
-                        crl = new X509CRL(file.FullName);
-                    }
-                    catch (Exception e)
-                    {
-                        Utils.Trace(e, "Could not parse CRL file.");
-                        continue;
-                    }
-
-                    if (!Utils.CompareDistinguishedName(crl.Issuer, issuer.Subject))
-                    {
-                        continue;
-                    }
-
-                    if (!crl.VerifySignature(issuer, false))
-                    {
-                        continue;
-                    }
-
-                    if (crl.IsRevoked(certificate))
-                    {
-                        return StatusCodes.BadCertificateRevoked;
-                    }
-
-                    if (crl.UpdateTime <= DateTime.UtcNow && (crl.NextUpdateTime == DateTime.MinValue || crl.NextUpdateTime >= DateTime.UtcNow))
-                    {
-                        crlExpired = false;
-                    }
-                }
-
-                // certificate is fine.
-                if (!crlExpired)
-                {
-                    return StatusCodes.Good;
+                    // hashes don't match, don't return it
+                    certs.Remove(pair.Key);
                 }
             }
 
-            // can't find a valid CRL.
-            return StatusCodes.BadCertificateRevocationUnknown;
+            return certs;
         }
-
-        /// <summary>
-        /// Returns the CRLs in the store.
-        /// </summary>
-        public List<X509CRL> EnumerateCRLs()
-        {
-            List<X509CRL> crls = new List<X509CRL>();
-
-            // check for CRL.
-            DirectoryInfo info = new DirectoryInfo(Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + "crl");
-
-            if (info.Exists)
-            {
-                foreach (FileInfo file in info.GetFiles("*.crl"))
-                {
-                    X509CRL crl = new X509CRL(file.FullName);
-                    crls.Add(crl);
-                }
-            }
-
-            return crls;
-        }
-
-        /// <summary>
-        /// Returns the CRLs for the issuer.
-        /// </summary>
-        public List<X509CRL> EnumerateCRLs(X509Certificate2 issuer)
-        {
-            if (issuer == null)
-            {
-                throw new ArgumentNullException("issuer");
-            }
-
-            List<X509CRL> crls = new List<X509CRL>();
-
-            // check for CRL.
-            DirectoryInfo info = new DirectoryInfo(Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + "crl");
-
-            if (info.Exists)
-            {
-                foreach (FileInfo file in info.GetFiles("*.crl"))
-                {
-                    X509CRL crl = new X509CRL(file.FullName);
-
-                    if (!Utils.CompareDistinguishedName(crl.Issuer, issuer.Subject))
-                    {
-                        continue;
-                    }
-
-                    if (!crl.VerifySignature(issuer, false))
-                    {
-                        continue;
-                    }
-
-                    if (crl.UpdateTime <= DateTime.UtcNow && (crl.NextUpdateTime == DateTime.MinValue || crl.NextUpdateTime >= DateTime.UtcNow))
-                    {
-                        crls.Add(crl);
-                    }
-                }
-            }
-
-            return crls;
-        }
-
-        /// <summary>
-        /// Adds a CRL to the store.
-        /// </summary>
-        public async void AddCRL(X509CRL crl)
-        {
-            if (crl == null)
-            {
-                throw new ArgumentNullException("crl");
-            }
-
-            X509Certificate2 issuer = null;
-            X509Certificate2Collection certificates = await Enumerate();
-            foreach (X509Certificate2 certificate in certificates)
-            {
-                if (Utils.CompareDistinguishedName(certificate.Subject, crl.Issuer))
-                {
-                    if (crl.VerifySignature(certificate, false))
-                    {
-                        issuer = certificate;
-                        break;
-                    }
-                }
-            }
-
-            if (issuer == null)
-            {
-                throw new ServiceResultException(StatusCodes.BadCertificateInvalid, "Could not find issuer of the CRL.");
-            }
-
-            StringBuilder builder = new StringBuilder();
-            builder.Append(Directory.GetCurrentDirectory());
-            
-            builder.Append(Path.DirectorySeparatorChar + "crl" + Path.DirectorySeparatorChar);
-            builder.Append(GetFileName(issuer));
-            builder.Append(".crl");
-
-            FileInfo fileInfo = new FileInfo(builder.ToString());
-
-            if (!fileInfo.Directory.Exists)
-            {
-                fileInfo.Directory.Create();
-            }
-
-            File.WriteAllBytes(fileInfo.FullName, crl.RawData);
-        }
-
-        /// <summary>
-        /// Removes a CRL from the store.
-        /// </summary>
-        public bool DeleteCRL(X509CRL crl)
-        {
-            if (crl == null)
-            {
-                throw new ArgumentNullException("crl");
-            }
-
-            string filePath = Directory.GetCurrentDirectory();
-            filePath += Path.DirectorySeparatorChar + "crl";
-
-            DirectoryInfo dirInfo = new DirectoryInfo(filePath);
-
-            if (dirInfo.Exists)
-            {
-                foreach (FileInfo fileInfo in dirInfo.GetFiles("*.crl"))
-                {
-                    if (fileInfo.Length == crl.RawData.Length)
-                    {
-                        byte[] bytes = File.ReadAllBytes(fileInfo.FullName);
-
-                        if (Utils.IsEqual(bytes, crl.RawData))
-                        {
-                            fileInfo.Delete();
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            return false;
-        }
-
-#region Private Methods
-        /// <summary>
-        /// Reads the current contents of the directory from disk.
-        /// </summary>
-        private IDictionary<string, X509Certificate2> Load(string thumbprint)
-        {
-            lock (m_lock)
-            {
-                m_certificates.Clear();
-                
-                //TODO: Load certs from TPM
-                
-                return m_certificates;
-            }
-        }
-
-        private X509Certificate2 Find(string thumbprint)
-        {
-            IDictionary<string, X509Certificate2> certificates = Load(thumbprint);
-
-            X509Certificate2 entry = null;
-
-            if (!String.IsNullOrEmpty(thumbprint))
-            {
-                if (!certificates.TryGetValue(thumbprint, out entry))
-                {
-                    return null;
-                }
-            }
-
-            return entry;
-        }
-
-        private string GetFileName(X509Certificate2 certificate)
-        {
-            // build file name.
-            string commonName = certificate.FriendlyName;
-
-            List<string> names = Utils.ParseDistinguishedName(certificate.Subject);
-
-            for (int ii = 0; ii < names.Count; ii++)
-            {
-                if (names[ii].StartsWith("CN="))
-                {
-                    commonName = names[ii].Substring(3).Trim();
-                    break;
-                }
-            }
-
-            StringBuilder fileName = new StringBuilder();
-
-            // remove any special characters.
-            for (int ii = 0; ii < commonName.Length; ii++)
-            {
-                char ch = commonName[ii];
-
-                if ("<>:\"/\\|?*".IndexOf(ch) != -1)
-                {
-                    ch = '+';
-                }
-
-                fileName.Append(ch);
-            }
-
-            fileName.Append(" [");
-            fileName.Append(certificate.Thumbprint);
-            fileName.Append("]");
-
-            return fileName.ToString();
-        }
-#endregion
 
 #region Private Fields
-        private object m_lock = new object();
-        private Tpm2Device m_tpmDevice = new TbsDevice();
-        private Tpm2 m_tpm;
-        private Dictionary<string, X509Certificate2> m_certificates;
+
+        Tpm2Device m_tpmDevice = new TbsDevice();
+        Tpm2 m_tpm;
+
+        // OwnerAuth is the owner authorization value of the TPM-under-test.  We
+        // assume that it (and other) auths are set to the default (null) value.
+        // If running on a real TPM, which has been provisioned by Windows, this
+        // value will be different. An administrator can retrieve the owner
+        // authorization value from e.g. the Registry on a Windows system.
+        // It is always null on a Windows 10 system, so the default constructor
+        // will do, at least for Windows 10 systems!
+        AuthValue m_ownerAuth = new AuthValue();
+
 #endregion
+
     }
 }

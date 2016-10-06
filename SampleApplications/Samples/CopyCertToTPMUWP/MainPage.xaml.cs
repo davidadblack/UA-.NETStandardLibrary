@@ -75,21 +75,22 @@ namespace CopyCertToTPMUWP
                     throw new CryptographicException("Certificate's private key not found!");
                 }
 
+                // Connect to the TPM
                 Tpm2Device tpmDevice = new TbsDevice();
-                Tpm2 tpm;
-                AuthValue ownerAuth = new AuthValue();
-
                 tpmDevice.Connect();
-                tpm = new Tpm2(tpmDevice);
+                Tpm2 tpm = new Tpm2(tpmDevice);
+
+                AuthValue ownerAuth = new AuthValue();
+                AuthValue nvAuth = AuthValue.FromRandom(8);
 
                 // Create a handle based on the hash of the cert thumbprint
-                TpmHandle nvHandle = TpmHandle.NV(3001/*certificate.Thumbprint.GetHashCode()*/);
+                ushort slotIndex = (ushort) certificate.Thumbprint.GetHashCode();
+                TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
                 // Clean up the slot
                 tpm[ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
 
                 // Define a slot for the thumbprint, which is 64 bytes bigger than we need as we write in 64-byte chunks
-                AuthValue nvAuth = AuthValue.FromRandom(8);
                 ushort size = (ushort)(certificate.RawData.Length + 4 + 64);
                 
                 tpm[ownerAuth].NvDefineSpace(TpmHandle.RhOwner, nvAuth, new NvPublic(nvHandle, TpmAlgId.Sha1, NvAttr.Authread | NvAttr.Authwrite, new byte[0], size));

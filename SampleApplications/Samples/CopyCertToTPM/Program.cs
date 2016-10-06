@@ -14,7 +14,6 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using Tpm2Lib;
 
 namespace CopyCertToTPM
@@ -66,27 +65,49 @@ namespace CopyCertToTPM
                 }
 
                 Tpm2Device tpmDevice = new TbsDevice();
-                Tpm2 tpm;
-                AuthValue ownerAuth = new AuthValue();
 
                 tpmDevice.Connect();
-                tpm = new Tpm2(tpmDevice);
+                Tpm2 tpm = new Tpm2(tpmDevice);
+
+                AuthValue ownerAuth = new AuthValue();
+                AuthValue nvAuth = AuthValue.FromRandom(8);
 
                 // Create a handle based on the hash of the cert thumbprint
-                TpmHandle nvHandle = TpmHandle.NV(certificate.Thumbprint.GetHashCode());
+                ushort slotIndex = (ushort) certificate.Thumbprint.GetHashCode();
+                TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
                 // Clean up the slot
                 tpm[ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
 
                 // Define a slot for the thumbprint
-                AuthValue nvAuth = AuthValue.FromRandom(8);
-                tpm[ownerAuth].NvDefineSpace(TpmHandle.RhOwner, nvAuth, new NvPublic(nvHandle, TpmAlgId.Sha1, NvAttr.Authread | NvAttr.Authwrite, new byte[0], (ushort)(certificate.RawData.Length + 4)));
+                ushort size = (ushort)(certificate.RawData.Length + 4 + 64);
+                tpm[ownerAuth].NvDefineSpace(TpmHandle.RhOwner, nvAuth, new NvPublic(nvHandle, TpmAlgId.Sha1, NvAttr.Authread | NvAttr.Authwrite, new byte[0], size));
 
                 // Write the size of the cert
-                tpm[nvAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(certificate.RawData.Length), 0);
+                ushort offset = 0;
+                tpm[nvAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(certificate.RawData.Length), offset);
+                offset += 4;
 
                 // Write the cert itself
-                tpm[nvAuth].NvWrite(nvHandle, nvHandle, certificate.RawData, 4);
+                byte[] dataToWrite = new byte[64];
+                int index = 0;
+                while (index < certificate.RawData.Length)
+                {
+                    for (int i = 0; i < 64; i++)
+                    {
+                        if (index < certificate.RawData.Length)
+                        {
+                            dataToWrite[i] = certificate.RawData[index];
+                            index++;
+                        }
+                        else
+                        {
+                            dataToWrite[i] = 0;
+                        }
+                    }
+                    tpm[nvAuth].NvWrite(nvHandle, nvHandle, dataToWrite, offset);
+                    offset += 64;
+                }
 
                 tpm.Dispose();
 

@@ -12,12 +12,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml;
-using System.Xml.Serialization;
 
 namespace Opc.Ua.Security
 {
@@ -419,64 +413,6 @@ namespace Opc.Ua.Security
             policy.ProfileUri = profileUri;
             policy.Enabled = false;
             return policy;
-        }
-    }
-
-    /// <summary>
-    /// An identifier for a certificate.
-    /// </summary>
-    public partial class CertificateIdentifier
-    {
-        /// <summary>
-        /// Gets the certificate associated with the identifier.
-        /// </summary>
-        public async Task<X509Certificate2> Find()
-        {
-            Opc.Ua.CertificateIdentifier output = SecuredApplication.FromCertificateIdentifier(this);
-            return await output.Find(false);
-        }
-
-        /// <summary>
-        /// Gets the certificate associated with the identifier.
-        /// </summary>
-        public async Task<X509Certificate2> Find(bool needPrivateKey)
-        {
-            Opc.Ua.CertificateIdentifier output = SecuredApplication.FromCertificateIdentifier(this);
-            return await output.Find(needPrivateKey);
-        }
-
-        /// <summary>
-        /// Opens the certificate store.
-        /// </summary>
-        public ICertificateStore OpenStore()
-        {
-            Opc.Ua.CertificateIdentifier output = SecuredApplication.FromCertificateIdentifier(this);
-            return output.OpenStore();
-        }
-
-        /// <summary>
-        /// Gets the private key file path.
-        /// </summary>
-        public async Task<string> GetPrivateKeyFilePath()
-        {
-            Opc.Ua.CertificateIdentifier output = SecuredApplication.FromCertificateIdentifier(this);
-            return await output.GetPrivateKeyFilePath();
-        }
-    }
-
-
-    /// <summary>
-    /// An identifier for a certificate store.
-    /// </summary>
-    public partial class CertificateStoreIdentifier
-    {
-        /// <summary>
-        /// Opens the certificate store.
-        /// </summary>
-        public ICertificateStore OpenStore()
-        {
-            Opc.Ua.CertificateStoreIdentifier output = SecuredApplication.FromCertificateStoreIdentifier(this);
-            return output.OpenStore();
         }
     }
 }

@@ -51,7 +51,7 @@ namespace Opc.Ua
             lock (m_lock)
             {
                 // Create a handle based on the hash of the cert thumbprint
-                TpmHandle nvHandle = TpmHandle.NV(certificate.Thumbprint.GetHashCode());
+                TpmHandle nvHandle = TpmHandle.NV((ushort) certificate.Thumbprint.GetHashCode());
 
                 // Clean up the slot
                 m_tpm[m_ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
@@ -72,7 +72,7 @@ namespace Opc.Ua
             lock (m_lock)
             {
                 // Create a handle based on the hash of the cert thumbprint
-                TpmHandle nvHandle = TpmHandle.NV(thumbprint.GetHashCode());
+                TpmHandle nvHandle = TpmHandle.NV((ushort) thumbprint.GetHashCode());
 
                 // Delete hash of thumbprint from NV storage
                 m_tpm[m_ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
@@ -80,18 +80,13 @@ namespace Opc.Ua
 
             return base.Delete(thumbprint);
         }
-
-        public new string GetPrivateKeyFilePath(string thumbprint)
-        {
-           return "TPM";
-        }
-
+   
         public new X509Certificate2 LoadPrivateKey(string thumbprint, string subjectName, string password)
         {
             try
             {
                 // Create a handle based on the hash of the cert thumbprint
-                TpmHandle nvHandle = TpmHandle.NV(thumbprint.GetHashCode());
+                TpmHandle nvHandle = TpmHandle.NV((ushort) thumbprint.GetHashCode());
 
                 // Read size of cert from NV storage
                 byte[] certSizeBlob = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, 4, 0);

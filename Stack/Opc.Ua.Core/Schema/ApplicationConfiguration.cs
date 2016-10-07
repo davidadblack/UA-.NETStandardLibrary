@@ -2148,8 +2148,7 @@ namespace Opc.Ua
             m_certificate = certificate;
             m_validationOptions = validationOptions;
         }
-
-
+        
         /// <summary>
         /// Initializes the identifier with the raw data from a certificate.
         /// </summary>

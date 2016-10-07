@@ -233,25 +233,6 @@ namespace Opc.Ua
             }
         }
 
-     
-        /// <summary cref="ICertificateStore.GetPrivateKeyFilePath" />
-        public string GetPrivateKeyFilePath(string thumbprint)
-        {
-            Entry entry = Find(thumbprint);
-
-            if (entry == null)
-            {
-                return null;
-            }
-
-            if (entry.PrivateKeyFile == null || !entry.PrivateKeyFile.Exists)
-            {
-                return null;
-            }
-
-            return entry.PrivateKeyFile.FullName;
-        }
-
         /// <summary>
         /// Gets the CRL file paths.
         /// </summary>

@@ -66,13 +66,6 @@ namespace Opc.Ua
         bool SupportsPrivateKeys { get; }
 
         /// <summary>
-        /// Returns the file containing the private key for the specified certificate.
-        /// </summary>
-        /// <param name="thumbprint">The thumbprint.</param>
-        /// <returns>The full file path. Null if the certificate does not exist or the private key does not exist.</returns>
-        string GetPrivateKeyFilePath(string thumbprint);
-        
-        /// <summary>
         /// Whether the store supports CRLs.
         /// </summary>
         bool SupportsCRLs { get; }

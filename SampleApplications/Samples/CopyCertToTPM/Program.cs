@@ -12,6 +12,7 @@
 
 using System;
 using System.IO;
+using System.Text;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Tpm2Lib;
@@ -26,17 +27,17 @@ namespace CopyCertToTPM
             {
                 if (string.IsNullOrEmpty(args[0]))
                 {
-                    throw new ArgumentException("Please provide a .pfx file path!");
+                    throw new ArgumentException("Please provide a certificate file path!");
                 }
 
                 X509Certificate2 certificate = null;
-                FileInfo privateKeyFile = new FileInfo(args[0]);
+                FileInfo certFile = new FileInfo(args[0]);
                 RSA rsa = null;
 
                 try
                 {
                     certificate = new X509Certificate2(
-                        privateKeyFile.FullName,
+                        certFile.FullName,
                         string.Empty,
                         X509KeyStorageFlags.Exportable | X509KeyStorageFlags.MachineKeySet);
                     rsa = certificate.GetRSAPrivateKey();
@@ -44,11 +45,13 @@ namespace CopyCertToTPM
                 catch (Exception)
                 {
                     certificate = new X509Certificate2(
-                        privateKeyFile.FullName,
+                        certFile.FullName,
                         string.Empty,
                         X509KeyStorageFlags.Exportable | X509KeyStorageFlags.DefaultKeySet);
                     rsa = certificate.GetRSAPrivateKey();
                 }
+                if (certificate.HasPrivateKey)
+                {
                 if (rsa != null)
                 {
                     int inputBlockSize = rsa.KeySize / 8 - 42;
@@ -56,12 +59,13 @@ namespace CopyCertToTPM
                     byte[] bytes2 = rsa.Decrypt(bytes1, RSAEncryptionPadding.OaepSHA1);
                     if (bytes2 == null)
                     {
-                        throw new CryptographicException("Certificate's private key cannot be used for encrption/decryption!");
+                            throw new CryptographicException("Certificate's private key cannot be used for encryption/decryption!");
                     }
                 }
                 else
                 {
-                    throw new CryptographicException("Certificate's private key not found!");
+                        throw new CryptographicException("Certificate's private could not be retrieved!");
+                    }
                 }
 
                 Tpm2Device tpmDevice = new TbsDevice();
@@ -79,10 +83,20 @@ namespace CopyCertToTPM
                 // Clean up the slot
                 tpm[ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
 
+                ushort size = 0;
+                if (certificate.HasPrivateKey)
+                {
+                    size = (ushort) (certificate.RawData.Length + 4 + 64);
+                }
+                else
+                {
                 // Define a slot for the thumbprint
-                ushort size = (ushort)(certificate.RawData.Length + 4 + 64);
+                    size = (ushort) certificate.Thumbprint.ToCharArray().Length;
+                }
                 tpm[ownerAuth].NvDefineSpace(TpmHandle.RhOwner, nvAuth, new NvPublic(nvHandle, TpmAlgId.Sha1, NvAttr.Authread | NvAttr.Authwrite, new byte[0], size));
 
+                if (certificate.HasPrivateKey)
+                {
                 // Write the size of the cert
                 ushort offset = 0;
                 tpm[nvAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(certificate.RawData.Length), offset);
@@ -107,6 +121,11 @@ namespace CopyCertToTPM
                     }
                     tpm[nvAuth].NvWrite(nvHandle, nvHandle, dataToWrite, offset);
                     offset += 64;
+                    }
+                }
+                else
+                {
+                    tpm[nvAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
                 }
 
                 tpm.Dispose();

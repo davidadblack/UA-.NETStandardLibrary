@@ -12,7 +12,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Runtime.Serialization;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -481,31 +480,6 @@ namespace Opc.Ua
             store.Open(this.StorePath);
             return store;
         }
-
-        /// <summary>
-        /// Gets the private key file path.
-        /// </summary>
-        public async Task<string> GetPrivateKeyFilePath()
-        {
-            X509Certificate2 certificate = await Find(false);
-
-            if (certificate == null)
-            {
-                return null;
-            }
-
-            ICertificateStore store = CertificateStoreIdentifier.CreateStore(this.StoreType);
-
-            try
-            {
-                store.Open(this.StorePath);
-                return store.GetPrivateKeyFilePath(certificate.Thumbprint);
-            }
-            finally
-            {
-                store.Close();
-            }
-        }
         #endregion
 
         #region Private Methods
@@ -754,14 +728,6 @@ namespace Opc.Ua
         public bool SupportsPrivateKeys
         {
             get { return false; }
-        }
-
-        /// <summary>
-        /// Returns the file containing the private key for the specified certificate.
-        /// </summary>
-        public string GetPrivateKeyFilePath(string thumbprint)
-        {
-            return null;
         }
 
         /// <summary>

@@ -14,6 +14,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using Tpm2Lib;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -37,17 +38,17 @@ namespace CopyCertToTPMUWP
             {
                 if (string.IsNullOrEmpty(args[0]))
                 {
-                    throw new ArgumentException("Please provide a .pfx file path!");
+                    throw new ArgumentException("Please provide a certificate file path!");
                 }
 
                 X509Certificate2 certificate = null;
-                FileInfo privateKeyFile = new FileInfo(args[0]);
+                FileInfo certFile = new FileInfo(args[0]);
                 RSA rsa = null;
 
                 try
                 {
                     certificate = new X509Certificate2(
-                        privateKeyFile.FullName,
+                        certFile.FullName,
                         string.Empty,
                         X509KeyStorageFlags.Exportable | X509KeyStorageFlags.MachineKeySet);
                     rsa = certificate.GetRSAPrivateKey();
@@ -55,24 +56,29 @@ namespace CopyCertToTPMUWP
                 catch (Exception)
                 {
                     certificate = new X509Certificate2(
-                        privateKeyFile.FullName,
+                        certFile.FullName,
                         string.Empty,
                         X509KeyStorageFlags.Exportable | X509KeyStorageFlags.DefaultKeySet);
                     rsa = certificate.GetRSAPrivateKey();
                 }
-                if (rsa != null)
+
+                // Check if the private key can be used
+                if (certificate.HasPrivateKey)
                 {
-                    int inputBlockSize = rsa.KeySize / 8 - 42;
-                    byte[] bytes1 = rsa.Encrypt(new byte[inputBlockSize], RSAEncryptionPadding.OaepSHA1);
-                    byte[] bytes2 = rsa.Decrypt(bytes1, RSAEncryptionPadding.OaepSHA1);
-                    if (bytes2 == null)
+                    if (rsa != null)
                     {
-                        throw new CryptographicException("Certificate's private key cannot be used for encrption/decryption!");
+                        int inputBlockSize = rsa.KeySize / 8 - 42;
+                        byte[] bytes1 = rsa.Encrypt(new byte[inputBlockSize], RSAEncryptionPadding.OaepSHA1);
+                        byte[] bytes2 = rsa.Decrypt(bytes1, RSAEncryptionPadding.OaepSHA1);
+                        if (bytes2 == null)
+                        {
+                            throw new CryptographicException("Certificate's private key cannot be used for encryption/decryption!");
+                        }
                     }
-                }
-                else
-                {
-                    throw new CryptographicException("Certificate's private key not found!");
+                    else
+                    {
+                        throw new CryptographicException("Certificate's private could not be retrieved!");
+                    }
                 }
 
                 // Connect to the TPM
@@ -90,37 +96,55 @@ namespace CopyCertToTPMUWP
                 // Clean up the slot
                 tpm[ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
 
-                // Define a slot for the thumbprint, which is 64 bytes bigger than we need as we write in 64-byte chunks
-                ushort size = (ushort)(certificate.RawData.Length + 4 + 64);
+                // Define a slot for the cert/thumbprint, which is 64 bytes bigger than we need as we write in 64-byte chunks
+                ushort size = 0;
+                if (certificate.HasPrivateKey)
+                {
+                    // For certificates with private keys, we store the entire certificate in NV storage
+                    size = (ushort) (certificate.RawData.Length + 4 + 64);
+                }
+                else
+                {
+                    // For certificates with public key only, we only store the certificate's thumbprint
+                    size = (ushort) certificate.Thumbprint.ToCharArray().Length;
+                }
                 
                 tpm[ownerAuth].NvDefineSpace(TpmHandle.RhOwner, nvAuth, new NvPublic(nvHandle, TpmAlgId.Sha1, NvAttr.Authread | NvAttr.Authwrite, new byte[0], size));
 
-                // Write the size of the cert (4 bytes)
-                ushort offset = 0;
-                tpm[nvAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(certificate.RawData.Length), offset);
-                offset += 4;
-
-                // Write the cert itself (in 64-byte chunks)
-                byte[] dataToWrite = new byte[64];
-                int index = 0;
-                while (index < certificate.RawData.Length)
+                if (certificate.HasPrivateKey)
                 {
-                    for (int i = 0; i < 64; i++)
+                    // Write the size of the cert (4 bytes)
+                    ushort offset = 0;
+                    tpm[nvAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(certificate.RawData.Length), offset);
+                    offset += 4;
+
+                    // Write the cert itself (in 64-byte chunks)
+                    byte[] dataToWrite = new byte[64];
+                    int index = 0;
+                    while (index < certificate.RawData.Length)
                     {
-                        if (index < certificate.RawData.Length)
+                        for (int i = 0; i < 64; i++)
                         {
-                            dataToWrite[i] = certificate.RawData[index];
-                            index++;
+                            if (index < certificate.RawData.Length)
+                            {
+                                dataToWrite[i] = certificate.RawData[index];
+                                index++;
+                            }
+                            else
+                            {
+                                // fill the rest of the buffer with zeros
+                                dataToWrite[i] = 0;
+                            }
                         }
-                        else
-                        {
-                            // fill the rest of the buffer with zeros
-                            dataToWrite[i] = 0;
-                        }
+
+                        tpm[nvAuth].NvWrite(nvHandle, nvHandle, dataToWrite, offset);
+                        offset += 64;
                     }
-                    
-                    tpm[nvAuth].NvWrite(nvHandle, nvHandle, dataToWrite, offset);
-                    offset += 64;
+                }
+                else
+                {
+                    // Write the thumbprint only
+                    tpm[nvAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
                 }
 
                 tpm.Dispose();
@@ -139,20 +163,35 @@ namespace CopyCertToTPMUWP
             openPicker.ViewMode = PickerViewMode.List;
             openPicker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             openPicker.FileTypeFilter.Add(".pfx");
-            StorageFile file = await openPicker.PickSingleFileAsync();
 
-            string[] args = new string[1];
+            StorageFile file = await openPicker.PickSingleFileAsync();
+            if (file == null)
+            {
+                // If file pickers are not supported (like in Windows 10 IoT Core), try the application data directory
+                // with a known file name like "cert.pfx" or "cert.der"
+                try
+                {
+                    file = await StorageFile.GetFileFromPathAsync(ApplicationData.Current.LocalFolder.Path + "\\cert.pfx");
+                }
+                catch (FileNotFoundException)
+                {
+                    try
+                    {
+                        file = await StorageFile.GetFileFromPathAsync(ApplicationData.Current.LocalFolder.Path + "\\cert.der");
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        file = null;
+                    }
+                }
+            }
+
             if (file != null)
             {
+                string[] args = new string[1];
                 args[0] = file.Path;
+                CopyCert(args);
             }
-            else
-            {
-                // if file pickers are not supported (like in Windows 10 IoT Core), try the application data directory with a known file name like "cert.pfx"
-                args[0] = ApplicationData.Current.LocalFolder.Path + "\\cert.pfx";
-            }
-
-            CopyCert(args);
         }
     }
 }

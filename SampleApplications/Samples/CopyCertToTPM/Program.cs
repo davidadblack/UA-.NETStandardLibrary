@@ -39,7 +39,7 @@ namespace CopyCertToTPM
                     certificate = new X509Certificate2(
                         certFile.FullName,
                         string.Empty,
-                        X509KeyStorageFlags.Exportable | X509KeyStorageFlags.MachineKeySet);
+                        X509KeyStorageFlags.Exportable | X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet);
                     rsa = certificate.GetRSAPrivateKey();
                 }
                 catch (Exception)
@@ -47,85 +47,87 @@ namespace CopyCertToTPM
                     certificate = new X509Certificate2(
                         certFile.FullName,
                         string.Empty,
-                        X509KeyStorageFlags.Exportable | X509KeyStorageFlags.DefaultKeySet);
+                        X509KeyStorageFlags.Exportable | X509KeyStorageFlags.DefaultKeySet | X509KeyStorageFlags.PersistKeySet);
                     rsa = certificate.GetRSAPrivateKey();
                 }
                 if (certificate.HasPrivateKey)
                 {
-                if (rsa != null)
-                {
-                    int inputBlockSize = rsa.KeySize / 8 - 42;
-                    byte[] bytes1 = rsa.Encrypt(new byte[inputBlockSize], RSAEncryptionPadding.OaepSHA1);
-                    byte[] bytes2 = rsa.Decrypt(bytes1, RSAEncryptionPadding.OaepSHA1);
-                    if (bytes2 == null)
+                    if (rsa != null)
                     {
+                        int inputBlockSize = rsa.KeySize / 8 - 42;
+                        byte[] bytes1 = rsa.Encrypt(new byte[inputBlockSize], RSAEncryptionPadding.OaepSHA1);
+                        byte[] bytes2 = rsa.Decrypt(bytes1, RSAEncryptionPadding.OaepSHA1);
+                        if (bytes2 == null)
+                        {
                             throw new CryptographicException("Certificate's private key cannot be used for encryption/decryption!");
+                        }
                     }
-                }
-                else
-                {
-                        throw new CryptographicException("Certificate's private could not be retrieved!");
+                    else
+                    {
+                        throw new CryptographicException("Certificate's private key could not be retrieved!");
                     }
                 }
 
+                // Init TPM
                 Tpm2Device tpmDevice = new TbsDevice();
-
                 tpmDevice.Connect();
                 Tpm2 tpm = new Tpm2(tpmDevice);
-
                 AuthValue ownerAuth = new AuthValue();
-                AuthValue nvAuth = AuthValue.FromRandom(8);
 
                 // Create a handle based on the hash of the cert thumbprint
-                ushort slotIndex = (ushort) certificate.Thumbprint.GetHashCode();
+                ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(certificate.Thumbprint)), 0);
                 TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
                 // Clean up the slot
                 tpm[ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
 
                 ushort size = 0;
+                byte[] rawData = certificate.Export(X509ContentType.SerializedCert, string.Empty);
                 if (certificate.HasPrivateKey)
                 {
-                    size = (ushort) (certificate.RawData.Length + 4 + 64);
+                    // For certificates with private keys, we store the entire certificate in NV storage
+                    size = (ushort) (rawData.Length + 4 + 64);
                 }
                 else
                 {
+                    // For certificates with public key only, we only store the certificate's thumbprint
+                    size = (ushort) Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()).Length;
+                }
+                
                 // Define a slot for the thumbprint
-                    size = (ushort) certificate.Thumbprint.ToCharArray().Length;
-                }
-                tpm[ownerAuth].NvDefineSpace(TpmHandle.RhOwner, nvAuth, new NvPublic(nvHandle, TpmAlgId.Sha1, NvAttr.Authread | NvAttr.Authwrite, new byte[0], size));
+                tpm[ownerAuth].NvDefineSpace(TpmHandle.RhOwner, ownerAuth, new NvPublic(nvHandle, TpmAlgId.Sha256, NvAttr.Authread | NvAttr.Authwrite, new byte[0], size));
 
                 if (certificate.HasPrivateKey)
                 {
-                // Write the size of the cert
-                ushort offset = 0;
-                tpm[nvAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(certificate.RawData.Length), offset);
-                offset += 4;
+                    // Write the size of the cert
+                    ushort offset = 0;
+                    tpm[ownerAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(rawData.Length), offset);
+                    offset += 4;
 
-                // Write the cert itself
-                byte[] dataToWrite = new byte[64];
-                int index = 0;
-                while (index < certificate.RawData.Length)
-                {
-                    for (int i = 0; i < 64; i++)
+                    // Write the cert itself
+                    byte[] dataToWrite = new byte[64];
+                    int index = 0;
+                    while (index < rawData.Length)
                     {
-                        if (index < certificate.RawData.Length)
+                        for (int i = 0; i < 64; i++)
                         {
-                            dataToWrite[i] = certificate.RawData[index];
-                            index++;
+                            if (index < rawData.Length)
+                            {
+                                dataToWrite[i] = rawData[index];
+                                index++;
+                            }
+                            else
+                            {
+                                dataToWrite[i] = 0;
+                            }
                         }
-                        else
-                        {
-                            dataToWrite[i] = 0;
-                        }
-                    }
-                    tpm[nvAuth].NvWrite(nvHandle, nvHandle, dataToWrite, offset);
-                    offset += 64;
+                        tpm[ownerAuth].NvWrite(nvHandle, nvHandle, dataToWrite, offset);
+                        offset += 64;
                     }
                 }
                 else
                 {
-                    tpm[nvAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
+                    tpm[ownerAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
                 }
 
                 tpm.Dispose();

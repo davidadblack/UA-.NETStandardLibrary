@@ -51,17 +51,17 @@ namespace Opc.Ua
             lock (m_lock)
             {
                 // Create a handle based on the hash of the cert thumbprint
-                TpmHandle nvHandle = TpmHandle.NV((ushort) certificate.Thumbprint.GetHashCode());
+                ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(certificate.Thumbprint)), 0);
+                TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
                 // Clean up the slot
                 m_tpm[m_ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
 
                 // Define a slot for the thumbprint
-                AuthValue nvAuth = AuthValue.FromRandom(8);
-                m_tpm[m_ownerAuth].NvDefineSpace(TpmHandle.RhOwner, nvAuth, new NvPublic(nvHandle, TpmAlgId.Sha1, NvAttr.Authread | NvAttr.Authwrite, new byte[0], (ushort) certificate.Thumbprint.ToCharArray().Length));
+                m_tpm[m_ownerAuth].NvDefineSpace(TpmHandle.RhOwner, m_ownerAuth, new NvPublic(nvHandle, TpmAlgId.Sha256, NvAttr.Authread | NvAttr.Authwrite, new byte[0], (ushort) certificate.Thumbprint.ToCharArray().Length));
 
                 // Write the thumbprint
-                m_tpm[nvAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
+                m_tpm[m_ownerAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
             }
 
             return base.Add(certificate);
@@ -72,7 +72,8 @@ namespace Opc.Ua
             lock (m_lock)
             {
                 // Create a handle based on the hash of the cert thumbprint
-                TpmHandle nvHandle = TpmHandle.NV((ushort) thumbprint.GetHashCode());
+                ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(thumbprint)), 0);
+                TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
                 // Delete hash of thumbprint from NV storage
                 m_tpm[m_ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
@@ -86,14 +87,37 @@ namespace Opc.Ua
             try
             {
                 // Create a handle based on the hash of the cert thumbprint
-                TpmHandle nvHandle = TpmHandle.NV((ushort) thumbprint.GetHashCode());
+                ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(thumbprint)), 0);
+                TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
-                // Read size of cert from NV storage
+                // Read size of cert from NV storage (located in the first 4 bytes)
                 byte[] certSizeBlob = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, 4, 0);
+                
+                // Load cert from NV storage in 64-byte chunks
                 int certSize = BitConverter.ToInt32(certSizeBlob, 0);
+                byte[] rawData = new byte[certSize];
+                ushort index = 0;
+                ushort sizeToRead = 0;
+                while (index < certSize)
+                {
+                    if ((certSize - index ) < 64)
+                    {
+                        sizeToRead = (ushort) (certSize - index);
+                    }
+                    else
+                    {
+                        sizeToRead = 64;
+                    }
 
-                // Load cert from NV storage
-                byte[] rawData = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, (ushort) certSize, 4);
+                    byte[] dataToRead = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, sizeToRead, (ushort)(index + 4));
+                    
+                    for (int i = 0; i < sizeToRead; i++)
+                    {
+                        rawData[index + i] = dataToRead[i];
+                    }
+
+                    index += sizeToRead;
+                }
 
                 X509Certificate2 certificate = null;
                 RSA rsa = null;
@@ -139,7 +163,8 @@ namespace Opc.Ua
             foreach(KeyValuePair<string, Entry> pair in certs)
             {
                 // Create a handle based on the hash of the cert thumbprint
-                TpmHandle nvHandle = TpmHandle.NV(pair.Key.GetHashCode());
+                ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(thumbprint)), 0);
+                TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
                 // Get byte array of hash
                 byte[] original = Encoding.UTF8.GetBytes(pair.Key.ToCharArray());

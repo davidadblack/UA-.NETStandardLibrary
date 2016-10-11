@@ -50,7 +50,7 @@ namespace CopyCertToTPMUWP
                     certificate = new X509Certificate2(
                         certFile.FullName,
                         string.Empty,
-                        X509KeyStorageFlags.Exportable | X509KeyStorageFlags.MachineKeySet);
+                        X509KeyStorageFlags.Exportable | X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet);
                     rsa = certificate.GetRSAPrivateKey();
                 }
                 catch (Exception)
@@ -58,7 +58,7 @@ namespace CopyCertToTPMUWP
                     certificate = new X509Certificate2(
                         certFile.FullName,
                         string.Empty,
-                        X509KeyStorageFlags.Exportable | X509KeyStorageFlags.DefaultKeySet);
+                        X509KeyStorageFlags.Exportable | X509KeyStorageFlags.DefaultKeySet | X509KeyStorageFlags.PersistKeySet);
                     rsa = certificate.GetRSAPrivateKey();
                 }
 
@@ -77,7 +77,7 @@ namespace CopyCertToTPMUWP
                     }
                     else
                     {
-                        throw new CryptographicException("Certificate's private could not be retrieved!");
+                        throw new CryptographicException("Certificate's private key could not be retrieved!");
                     }
                 }
 
@@ -85,49 +85,48 @@ namespace CopyCertToTPMUWP
                 Tpm2Device tpmDevice = new TbsDevice();
                 tpmDevice.Connect();
                 Tpm2 tpm = new Tpm2(tpmDevice);
-
                 AuthValue ownerAuth = new AuthValue();
-                AuthValue nvAuth = AuthValue.FromRandom(8);
 
                 // Create a handle based on the hash of the cert thumbprint
-                ushort slotIndex = (ushort) certificate.Thumbprint.GetHashCode();
+                ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(certificate.Thumbprint)), 0);
                 TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
                 // Clean up the slot
                 tpm[ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
 
-                // Define a slot for the cert/thumbprint, which is 64 bytes bigger than we need as we write in 64-byte chunks
                 ushort size = 0;
+                byte[] rawData = certificate.Export(X509ContentType.SerializedCert, string.Empty);
                 if (certificate.HasPrivateKey)
                 {
                     // For certificates with private keys, we store the entire certificate in NV storage
-                    size = (ushort) (certificate.RawData.Length + 4 + 64);
+                    size = (ushort) (rawData.Length + 4 + 64);
                 }
                 else
                 {
                     // For certificates with public key only, we only store the certificate's thumbprint
-                    size = (ushort) certificate.Thumbprint.ToCharArray().Length;
+                    size = (ushort) Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()).Length;
                 }
-                
-                tpm[ownerAuth].NvDefineSpace(TpmHandle.RhOwner, nvAuth, new NvPublic(nvHandle, TpmAlgId.Sha1, NvAttr.Authread | NvAttr.Authwrite, new byte[0], size));
+
+                // Define a slot for the cert/thumbprint, which is 64 bytes bigger than we need as we write in 64-byte chunks
+                tpm[ownerAuth].NvDefineSpace(TpmHandle.RhOwner, ownerAuth, new NvPublic(nvHandle, TpmAlgId.Sha256, NvAttr.Authread | NvAttr.Authwrite, new byte[0], size));
 
                 if (certificate.HasPrivateKey)
                 {
                     // Write the size of the cert (4 bytes)
                     ushort offset = 0;
-                    tpm[nvAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(certificate.RawData.Length), offset);
+                    tpm[ownerAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(rawData.Length), offset);
                     offset += 4;
 
                     // Write the cert itself (in 64-byte chunks)
                     byte[] dataToWrite = new byte[64];
                     int index = 0;
-                    while (index < certificate.RawData.Length)
+                    while (index < rawData.Length)
                     {
                         for (int i = 0; i < 64; i++)
                         {
-                            if (index < certificate.RawData.Length)
+                            if (index < rawData.Length)
                             {
-                                dataToWrite[i] = certificate.RawData[index];
+                                dataToWrite[i] = rawData[index];
                                 index++;
                             }
                             else
@@ -137,14 +136,14 @@ namespace CopyCertToTPMUWP
                             }
                         }
 
-                        tpm[nvAuth].NvWrite(nvHandle, nvHandle, dataToWrite, offset);
+                        tpm[ownerAuth].NvWrite(nvHandle, nvHandle, dataToWrite, offset);
                         offset += 64;
                     }
                 }
                 else
                 {
                     // Write the thumbprint only
-                    tpm[nvAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
+                    tpm[ownerAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
                 }
 
                 tpm.Dispose();

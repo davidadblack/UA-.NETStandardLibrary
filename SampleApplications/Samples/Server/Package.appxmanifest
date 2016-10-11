@@ -22,16 +22,16 @@
       </uap:VisualElements>
       <Extensions>
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name=".pfx">
+          <uap:FileTypeAssociation Name=".der">
             <uap:SupportedFileTypes>
-              <uap:FileType>.pfx</uap:FileType>
+              <uap:FileType>.der</uap:FileType>
             </uap:SupportedFileTypes>
           </uap:FileTypeAssociation>
         </uap:Extension>
         <uap:Extension Category="windows.fileTypeAssociation">
-          <uap:FileTypeAssociation Name=".der">
+          <uap:FileTypeAssociation Name=".pfx">
             <uap:SupportedFileTypes>
-              <uap:FileType>.der</uap:FileType>
+              <uap:FileType>.pfx</uap:FileType>
             </uap:SupportedFileTypes>
           </uap:FileTypeAssociation>
         </uap:Extension>
@@ -41,6 +41,7 @@
   <Capabilities>
     <Capability Name="internetClientServer" />
     <Capability Name="privateNetworkClientServer" />
+    <Capability Name="internetClient" />
     <uap:Capability Name="enterpriseAuthentication" />
     <uap:Capability Name="sharedUserCertificates" />
     <uap:Capability Name="userAccountInformation" />

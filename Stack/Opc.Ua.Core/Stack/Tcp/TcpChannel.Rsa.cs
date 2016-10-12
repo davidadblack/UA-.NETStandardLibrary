@@ -84,7 +84,7 @@ namespace Opc.Ua.Bindings
             X509Certificate2   signingCertificate)
         {
             // extract the private key.
-            using (RSA rsa = signingCertificate.GetRSAPrivateKey())
+            using (RSA rsa = Utils.CurrentCertificateStore.GetRSACSP(signingCertificate))
             {
                 if (rsa == null)
                 {
@@ -201,9 +201,8 @@ namespace Opc.Ua.Bindings
             bool               useOaep)
         {
             // get the encrypting key.
-            using (RSA rsa = encryptingCertificate.GetRSAPrivateKey())
+            using (RSA rsa = Utils.CurrentCertificateStore.GetRSACSP(encryptingCertificate))
             {
-
                 if (rsa == null)
                 {
                     throw ServiceResultException.Create(StatusCodes.BadSecurityChecksFailed, "No private key for certificate.");

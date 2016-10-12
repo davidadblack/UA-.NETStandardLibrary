@@ -341,16 +341,6 @@ namespace Opc.Ua.Client.Controls
                     }
                 }
 
-                // check if a private key is available.
-                if (certificate.HasPrivateKey)
-                {
-                    listItem.SubItems[2].Text = "Yes";
-                }
-                else
-                {
-                    listItem.SubItems[2].Text = "No";
-                }
-
                 // look up domains.
                 IList<string> domains = Utils.GetDomainsFromCertficate(certificate);
 
@@ -449,37 +439,12 @@ namespace Opc.Ua.Client.Controls
 
                 // remove the certificates.
                 List<ListViewItem> itemsToDelete = new List<ListViewItem>();
-                bool yesToAll = false;
-
+                
                 using (ICertificateStore store = m_storeId.OpenStore())
                 {
                     for (int ii = 0; ii < ItemsLV.SelectedItems.Count; ii++)
                     {
                         X509Certificate2 certificate = ItemsLV.SelectedItems[ii].Tag as X509Certificate2;
-
-                        // check for private key.
-                        X509Certificate2Collection certificate2 = await store.FindByThumbprint(certificate.Thumbprint);
-
-                        if (!yesToAll && (certificate2.Count > 0) && certificate2[0].HasPrivateKey)
-                        {
-                            StringBuilder buffer = new StringBuilder();
-                            buffer.Append("Certificate '");
-                            buffer.Append(certificate2[0].Subject);
-                            buffer.Append("'");
-                            buffer.Append("Deleting it may cause applications to stop working.");
-                            buffer.Append("\r\n");
-                            buffer.Append("\r\n");
-                            buffer.Append("Are you sure you wish to continue?.");
-
-                            DialogResult yesno = new YesNoDlg().ShowDialog(buffer.ToString(), "Delete Private Key", true);
-
-                            if (yesno == DialogResult.No)
-                            {
-                                continue;
-                            }
-
-                            yesToAll = yesno == DialogResult.Retry;
-                        }
 
                         if (certificate != null)
                         {

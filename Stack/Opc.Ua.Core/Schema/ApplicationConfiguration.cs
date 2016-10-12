@@ -2155,7 +2155,7 @@ namespace Opc.Ua
         public CertificateIdentifier(byte[] rawData)
         {
             Initialize();
-            m_certificate = CertificateFactory.Create(rawData, true);
+            m_certificate = new X509Certificate2(rawData);
         }
 
         /// <summary>
@@ -2398,7 +2398,7 @@ namespace Opc.Ua
                     return;
                 }
 
-                m_certificate = CertificateFactory.Create(value, true);
+                m_certificate = new X509Certificate2(value);
                 m_subjectName = m_certificate.Subject;
                 m_thumbprint = m_certificate.Thumbprint;
             }

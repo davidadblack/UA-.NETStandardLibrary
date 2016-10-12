@@ -84,9 +84,8 @@ namespace Opc.Ua
             X509Certificate2 signingCertificate)
         {
             // extract the private key.
-            using (RSA rsa = signingCertificate.GetRSAPrivateKey())
+            using (RSA rsa = Utils.CurrentCertificateStore.GetRSACSP(signingCertificate))
             {
-
                 if (rsa == null)
                 {
                     throw ServiceResultException.Create(StatusCodes.BadSecurityChecksFailed, "No private key for certificate.");
@@ -108,7 +107,6 @@ namespace Opc.Ua
             // extract the private key.
             using (RSA rsa = signingCertificate.GetRSAPublicKey())
             {
-
                 if (rsa == null)
                 {
                     throw ServiceResultException.Create(StatusCodes.BadSecurityChecksFailed, "No public key for certificate.");
@@ -251,7 +249,7 @@ namespace Opc.Ua
             ArraySegment<byte> outputBuffer)
         {
             // get the encrypting key.
-            using (RSA rsa = encryptingCertificate.GetRSAPrivateKey())
+            using (RSA rsa = Utils.CurrentCertificateStore.GetRSACSP(encryptingCertificate))
             {
                 if (rsa == null)
                 {

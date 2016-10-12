@@ -12,6 +12,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 
@@ -61,10 +62,6 @@ namespace Opc.Ua
         /// <returns>The matching certificate</returns>
         Task<X509Certificate2Collection> FindByThumbprint(string thumbprint);
         		
-		/// Whether the store supports private keys.
-		/// </summary>
-        bool SupportsPrivateKeys { get; }
-
         /// <summary>
         /// Whether the store supports CRLs.
         /// </summary>
@@ -94,5 +91,7 @@ namespace Opc.Ua
         /// Removes a CRL from the store.
         /// </summary>
         bool DeleteCRL(X509CRL crl);
+
+        RSA GetRSACSP(X509Certificate2 encryptingCertificate);
     };
 }

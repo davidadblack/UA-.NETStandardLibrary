@@ -1386,7 +1386,7 @@ namespace Opc.Ua.Client.Controls
                 if (!m_discoverySucceeded)
                 {
                     DialogResult result = MessageBox.Show(
-                        "Endpoint information may be out of date because the discovery process has not completed. Continue anyways?",
+                        "Endpoint information may be out of date because the discovery process has not completed. Continue anyway?",
                         this.Text,
                         MessageBoxButtons.YesNo,
                         MessageBoxIcon.Warning);

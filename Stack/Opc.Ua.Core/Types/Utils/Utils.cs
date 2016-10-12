@@ -70,6 +70,11 @@ namespace Opc.Ua
         /// The default certificate store's type.
         /// </summary>
         public const string DefaultStoreType = CertificateStoreType.Directory;
+
+        /// <summary>
+        /// The current certificate store.
+        /// </summary>
+        public static ICertificateStore CurrentCertificateStore = null;
         #endregion
                 
         #region Trace Support
@@ -2239,7 +2244,7 @@ namespace Opc.Ua
         {
             try
             {
-                return CertificateFactory.Create(certificateData, true);
+                return new X509Certificate2(certificateData);
             }
             catch (Exception e)
             {
@@ -2265,7 +2270,7 @@ namespace Opc.Ua
 	        {
                 try
                 {
-                    certificate = CertificateFactory.Create(certificatesBytes.ToArray(), true);
+                    certificate = new X509Certificate2(certificatesBytes.ToArray());
                 }
                 catch(Exception e)
                 {

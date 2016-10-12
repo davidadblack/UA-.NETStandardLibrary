@@ -664,7 +664,7 @@ namespace Opc.Ua.Bindings
             // verify sender certificate.
             if (certificateData != null && certificateData.Length > 0)
             {
-                senderCertificate = CertificateFactory.Create(certificateData, true);
+                senderCertificate = new X509Certificate2(certificateData);
 
                 try
                 {

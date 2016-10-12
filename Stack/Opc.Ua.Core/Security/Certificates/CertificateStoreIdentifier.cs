@@ -111,6 +111,9 @@ namespace Opc.Ua
                     break;
                 }
             }
+
+            Utils.CurrentCertificateStore = store;
+
             return store;
         }
 

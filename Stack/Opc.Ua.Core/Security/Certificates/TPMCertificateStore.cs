@@ -17,6 +17,16 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Collections.Generic;
 using Tpm2Lib;
+using System.IO;
+using Org.BouncyCastle.OpenSsl;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.Math;
+using Org.BouncyCastle.X509;
+using Org.BouncyCastle.Crypto.Operators;
+using Org.BouncyCastle.Asn1;
+using Org.BouncyCastle.Security;
+using Org.BouncyCastle.Crypto.Parameters;
 
 namespace Opc.Ua
 {
@@ -25,7 +35,7 @@ namespace Opc.Ua
     /// </summary>
     public class TPMCertificateStore : DirectoryCertificateStore
     {
-        public new void Open(string location)
+        public override void Open(string location)
         {
             lock (m_lock)
             {
@@ -35,7 +45,7 @@ namespace Opc.Ua
             }
         }
 
-        public new void Close()
+        public override void Close()
         {
             lock (m_lock)
             {
@@ -44,56 +54,70 @@ namespace Opc.Ua
             }
         }
 
-        public new Task Add(X509Certificate2 certificate)
+        public override Task Add(X509Certificate2 certificate)
         {
             if (certificate == null) throw new ArgumentNullException("certificate");
          
             lock (m_lock)
             {
-                // Create a handle based on the hash of the cert thumbprint
-                ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(certificate.Thumbprint)), 0);
-                TpmHandle nvHandle = TpmHandle.NV(slotIndex);
+                try
+                {
+                    // Create a handle based on the hash of the cert thumbprint
+                    ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(certificate.Thumbprint)), 0);
+                    TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
-                // Clean up the slot
-                m_tpm[m_ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
+                    // Clean up the slot
+                    m_tpm[m_ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
 
-                // Define a slot for the thumbprint
-                m_tpm[m_ownerAuth].NvDefineSpace(TpmHandle.RhOwner, m_ownerAuth, new NvPublic(nvHandle, TpmAlgId.Sha256, NvAttr.Authread | NvAttr.Authwrite, new byte[0], (ushort) certificate.Thumbprint.ToCharArray().Length));
+                    // Define a slot for the thumbprint
+                    m_tpm[m_ownerAuth].NvDefineSpace(TpmHandle.RhOwner, m_ownerAuth, new NvPublic(nvHandle, TpmAlgId.Sha256, NvAttr.Authread | NvAttr.Authwrite, new byte[0], (ushort)certificate.Thumbprint.ToCharArray().Length));
 
-                // Write the thumbprint
-                m_tpm[m_ownerAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
+                    // Write the thumbprint
+                    m_tpm[m_ownerAuth].NvWrite(nvHandle, nvHandle, Encoding.UTF8.GetBytes(certificate.Thumbprint.ToCharArray()), 0);
+                }
+                catch (Exception e)
+                {
+                    Utils.Trace(e, "Could not add application certificate thumprint to TPM MV storage!");
+                }
             }
 
             return base.Add(certificate);
         }
 
-        public new Task<bool> Delete(string thumbprint)
+        public override Task<bool> Delete(string thumbprint)
         {
             lock (m_lock)
             {
-                // Create a handle based on the hash of the cert thumbprint
-                ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(thumbprint)), 0);
-                TpmHandle nvHandle = TpmHandle.NV(slotIndex);
+                try
+                {
+                    // Create a handle based on the hash of the cert thumbprint
+                    ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(thumbprint)), 0);
+                    TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
-                // Delete hash of thumbprint from NV storage
-                m_tpm[m_ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
+                    // Delete hash of thumbprint from NV storage
+                    m_tpm[m_ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
+                }
+                catch (Exception e)
+                {
+                    Utils.Trace(e, "Could not delete application certificate thumprint from TPM MV storage!");
+                }
             }
 
             return base.Delete(thumbprint);
         }
    
-        public new X509Certificate2 LoadPrivateKey(string thumbprint, string subjectName, string password)
+        public override X509Certificate2 LoadApplicationCertificate(string thumbprint, string subjectName, string password)
         {
             try
             {
-                // Create a handle based on the hash of the cert thumbprint
-                ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(thumbprint)), 0);
+                // Create a handle based on the hash of the keys
+                ushort slotIndex = ushort.Parse(thumbprint);
                 TpmHandle nvHandle = TpmHandle.NV(slotIndex);
 
-                // Read size of cert from NV storage (located in the first 4 bytes)
+                // Read size of keys from NV storage (located in the first 4 bytes)
                 byte[] certSizeBlob = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, 4, 0);
                 
-                // Load cert from NV storage in 64-byte chunks
+                // Load keys from NV storage in 64-byte chunks
                 int certSize = BitConverter.ToInt32(certSizeBlob, 0);
                 byte[] rawData = new byte[certSize];
                 ushort index = 0;
@@ -119,24 +143,60 @@ namespace Opc.Ua
                     index += sizeToRead;
                 }
 
-                X509Certificate2 certificate = null;
-                RSA rsa = null;
-                try
-                {
-                    certificate = new X509Certificate2(
-                        rawData,
-                        (password == null) ? String.Empty : password,
-                        X509KeyStorageFlags.Exportable | X509KeyStorageFlags.MachineKeySet);
-                    rsa = certificate.GetRSAPrivateKey();
-                }
-                catch (Exception)
-                {
-                    certificate = new X509Certificate2(
-                        rawData,
-                        (password == null) ? String.Empty : password,
-                        X509KeyStorageFlags.Exportable | X509KeyStorageFlags.DefaultKeySet);
-                    rsa = certificate.GetRSAPrivateKey();
-                }
+                // Import
+                TextReader textReader = new StringReader(new string(Encoding.ASCII.GetChars(rawData)));
+                PemReader pemReader = new PemReader(textReader);
+                AsymmetricCipherKeyPair keys = (AsymmetricCipherKeyPair) pemReader.ReadObject();
+
+                X509Name CN = new X509Name("CN="+ subjectName + ",DC=" + Utils.GetHostName());
+                BigInteger SN = BigInteger.ProbablePrime(120, new Random());
+
+                // Certificate Generator
+                X509V3CertificateGenerator cGenerator = new X509V3CertificateGenerator();
+                cGenerator.SetSerialNumber(SN);
+                cGenerator.SetSubjectDN(CN);
+                cGenerator.SetIssuerDN(CN);
+                cGenerator.SetNotBefore(DateTime.Now.Subtract(new TimeSpan(7, 0, 0, 0))); // a week ago
+                cGenerator.SetNotAfter(DateTime.Now.AddYears(1)); // a year from now
+                cGenerator.SetPublicKey(keys.Public);
+                cGenerator.AddExtension(X509Extensions.ExtendedKeyUsage, true, new ExtendedKeyUsage(new List<DerObjectIdentifier>() { new DerObjectIdentifier("1.3.6.1.5.5.7.3.1") }));
+                cGenerator.AddExtension(X509Extensions.AuthorityKeyIdentifier.Id, false, new AuthorityKeyIdentifier(SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(keys.Public), new GeneralNames(new GeneralName(CN)), SN));
+
+                ISignatureFactory signatureFactory = new Asn1SignatureFactory("SHA1withRSA", keys.Private, new SecureRandom());
+                Org.BouncyCastle.X509.X509Certificate cert = cGenerator.Generate(signatureFactory);
+                X509Certificate2 certificate = new X509Certificate2(cert.GetEncoded());
+                
+                RSACng rsa = new RSACng();
+                RsaPrivateCrtKeyParameters keyParams = (RsaPrivateCrtKeyParameters) keys.Private;
+
+                m_RSAParams = new RSAParameters();
+
+                m_RSAParams.Modulus = new byte[keyParams.Modulus.ToByteArrayUnsigned().Length];
+                keyParams.Modulus.ToByteArrayUnsigned().CopyTo(m_RSAParams.Modulus, 0);
+
+                m_RSAParams.P = new byte[keyParams.P.ToByteArrayUnsigned().Length];
+                keyParams.P.ToByteArrayUnsigned().CopyTo(m_RSAParams.P, 0);
+
+                m_RSAParams.Q = new byte[keyParams.Q.ToByteArrayUnsigned().Length];
+                keyParams.Q.ToByteArrayUnsigned().CopyTo(m_RSAParams.Q, 0);
+
+                m_RSAParams.DP = new byte[keyParams.DP.ToByteArrayUnsigned().Length];
+                keyParams.DP.ToByteArrayUnsigned().CopyTo(m_RSAParams.DP, 0);
+
+                m_RSAParams.DQ = new byte[keyParams.DQ.ToByteArrayUnsigned().Length];
+                keyParams.DQ.ToByteArrayUnsigned().CopyTo(m_RSAParams.DQ, 0);
+
+                m_RSAParams.InverseQ = new byte[keyParams.QInv.ToByteArrayUnsigned().Length];
+                keyParams.QInv.ToByteArrayUnsigned().CopyTo(m_RSAParams.InverseQ, 0);
+
+                m_RSAParams.D = new byte[keyParams.Exponent.ToByteArrayUnsigned().Length];
+                keyParams.Exponent.ToByteArrayUnsigned().CopyTo(m_RSAParams.D, 0);
+
+                m_RSAParams.Exponent = new byte[keyParams.PublicExponent.ToByteArrayUnsigned().Length];
+                keyParams.PublicExponent.ToByteArrayUnsigned().CopyTo(m_RSAParams.Exponent, 0);
+
+
+                rsa.ImportParameters(m_RSAParams);
                 if (rsa != null)
                 {
                     int inputBlockSize = rsa.KeySize / 8 - 42;
@@ -150,42 +210,66 @@ namespace Opc.Ua
             }
             catch (Exception e)
             {
-                Utils.Trace(e, "Could not load private key for certificate " + subjectName);
+                Utils.Trace(e, "Could not load application certificate " + subjectName);
             }
 
             return null;
         }
 
-        private new IDictionary<string, Entry> Load(string thumbprint)
+        protected override IDictionary<string, Entry> Load(string thumbprint)
         {
             IDictionary<string, Entry> certs = base.Load(thumbprint);
 
             foreach(KeyValuePair<string, Entry> pair in certs)
             {
-                // Create a handle based on the hash of the cert thumbprint
-                ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(thumbprint)), 0);
-                TpmHandle nvHandle = TpmHandle.NV(slotIndex);
-
-                // Get byte array of hash
-                byte[] original = Encoding.UTF8.GetBytes(pair.Key.ToCharArray());
-
-                // Load hash from NV storage
-                byte[] rawData = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, (ushort) original.Length, 0);
-
-                if (!original.IsEqual(rawData))
+                try
                 {
-                    // hashes don't match, don't return it
-                    certs.Remove(pair.Key);
+                    // Create a handle based on the hash of the cert thumbprint
+                    ushort slotIndex = BitConverter.ToUInt16(CryptoLib.HashData(TpmAlgId.Sha256, Encoding.UTF8.GetBytes(thumbprint)), 0);
+                    TpmHandle nvHandle = TpmHandle.NV(slotIndex);
+
+                    // Get byte array of hash
+                    byte[] original = Encoding.UTF8.GetBytes(pair.Key.ToCharArray());
+
+                    // Load hash from NV storage
+                    byte[] rawData = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, (ushort)original.Length, 0);
+
+                    if (!original.IsEqual(rawData))
+                    {
+                        // hashes don't match, don't return it
+                        certs.Remove(pair.Key);
+                    }
+                }
+                catch (Exception e)
+                {
+                    Utils.Trace(e, "Could not check application certificate thumprint in TPM MV storage!");
                 }
             }
 
             return certs;
         }
 
+        public override RSA GetRSACSP(X509Certificate2 encryptingCertificate)
+        {
+            RSA rsa = null;
+            if (encryptingCertificate.HasPrivateKey)
+            {
+                rsa = encryptingCertificate.GetRSAPrivateKey();
+            }
+            else
+            {
+                rsa = new RSACng();
+                rsa.ImportParameters(m_RSAParams);
+            }
+
+            return rsa;
+        }
+
 #region Private Fields
 
-        Tpm2Device m_tpmDevice = new TbsDevice();
-        Tpm2 m_tpm;
+        private RSAParameters m_RSAParams;
+        private Tpm2Device m_tpmDevice = new TbsDevice();
+        private Tpm2 m_tpm;
 
         // OwnerAuth is the owner authorization value of the TPM-under-test.  We
         // assume that it (and other) auths are set to the default (null) value.
@@ -194,7 +278,7 @@ namespace Opc.Ua
         // authorization value from e.g. the Registry on a Windows system.
         // It is always null on a Windows 10 system, so the default constructor
         // will do, at least for Windows 10 systems!
-        AuthValue m_ownerAuth = new AuthValue();
+        private AuthValue m_ownerAuth = new AuthValue();
 
 #endregion
 

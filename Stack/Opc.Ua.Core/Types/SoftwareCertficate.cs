@@ -51,7 +51,7 @@ namespace Opc.Ua
 
             try
             {
-                certificate = CertificateFactory.Create(signedCertificate, true);
+                certificate = new X509Certificate2(signedCertificate);
                 validator.Validate(certificate);
             }
             catch (Exception e)

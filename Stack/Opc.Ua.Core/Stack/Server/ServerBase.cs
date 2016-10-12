@@ -1289,13 +1289,6 @@ namespace Opc.Ua
                     "Server does not have an instance certificate assigned.");
             }
 
-            if (!InstanceCertificate.HasPrivateKey)
-            {
-                throw new ServiceResultException(
-                    StatusCodes.BadConfigurationError,
-                    "Server does not have access to the private key for the instance certificate.");
-            }
-
             // use the message context from the configuration to ensure the channels are using the same one.
             MessageContext = configuration.CreateMessageContext();
 

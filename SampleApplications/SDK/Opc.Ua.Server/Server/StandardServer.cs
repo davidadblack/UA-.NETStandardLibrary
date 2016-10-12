@@ -340,7 +340,7 @@ namespace Opc.Ua.Server
                 {
                     try
                     {
-                        parsedClientCertificate = CertificateFactory.Create(clientCertificate, true);
+                        parsedClientCertificate = new X509Certificate2(clientCertificate);
 
                         if (context.SecurityPolicyUri != SecurityPolicies.None)
                         {

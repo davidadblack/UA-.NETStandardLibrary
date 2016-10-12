@@ -16,7 +16,7 @@
       <StoreType>TPM</StoreType>
       <StorePath>OPC Foundation\CertificateStores\MachineDefault</StorePath>
       <SubjectName>UA Sample Server</SubjectName>
-      <Thumbprint>901E6DBD03500A181A34612CBD2D6843D876C71C</Thumbprint>
+      <Thumbprint>28979</Thumbprint>
     </ApplicationCertificate>
 
     <!-- Where the issuer certificate are stored (certificate authorities) -->

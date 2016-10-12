@@ -268,7 +268,7 @@ namespace Opc.Ua.Client.Controls
             buffer.AppendFormat("Valid To: {0}\r\n", e.Certificate.NotAfter);
             buffer.AppendFormat("Thumbprint: {0}\r\n\r\n", e.Certificate.Thumbprint);
             
-            buffer.AppendFormat("Accept anyways?");
+            buffer.AppendFormat("Accept anyway?");
 
             if (MessageBox.Show(buffer.ToString(), caller.Text, MessageBoxButtons.YesNo) == DialogResult.Yes)
             {

@@ -12,7 +12,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
@@ -159,16 +158,16 @@ namespace Opc.Ua
         }
 
         /// <summary>
-        /// Loads the private key for the certificate with an optional password.
+        /// Loads the application certificate with an optional password.
         /// </summary>
-        public async Task<X509Certificate2> LoadPrivateKey(String password)
+        public async Task<X509Certificate2> LoadApplicationCertificate(String password)
         {
             if (this.StoreType == CertificateStoreType.Directory)
             {                
                 using (DirectoryCertificateStore store = new DirectoryCertificateStore())
                 {
                     store.Open(this.StorePath);
-                    m_certificate = store.LoadPrivateKey(this.Thumbprint, this.SubjectName, password);
+                    m_certificate = store.LoadApplicationCertificate(this.Thumbprint, this.SubjectName, password);
                     return m_certificate;
                 }
             }
@@ -178,7 +177,7 @@ namespace Opc.Ua
                 using (TPMCertificateStore store = new TPMCertificateStore())
                 {
                     store.Open(this.StorePath);
-                    m_certificate = store.LoadPrivateKey(this.Thumbprint, this.SubjectName, password);
+                    m_certificate = store.LoadApplicationCertificate(this.Thumbprint, this.SubjectName, password);
                     return m_certificate;
                 }
             }
@@ -197,7 +196,7 @@ namespace Opc.Ua
             X509Certificate2 certificate = null;
 
             // check if the entire certificate has been specified.
-            if (m_certificate != null && (!needPrivateKey || m_certificate.HasPrivateKey))
+            if (m_certificate != null)
             {
                 certificate = m_certificate;
             }
@@ -217,12 +216,6 @@ namespace Opc.Ua
                         m_certificate = certificate;
                     }
                 }
-            }
-
-            // use the single instance in the certificate cache.
-            if (needPrivateKey)
-            {
-                certificate = m_certificate = CertificateFactory.Load(certificate, true);
             }
 
             return certificate;
@@ -306,19 +299,17 @@ namespace Opc.Ua
 
                 foreach (X509Certificate2 certificate in collection)
                 {
-                    if (!needPrivateKey || certificate.HasPrivateKey)
+                    if (String.IsNullOrEmpty(subjectName))
                     {
-                        if (String.IsNullOrEmpty(subjectName))
-                        {
-                            return certificate;
-                        }
+                        // return the first one
+                        return certificate;
+                    }
 
-                        List<string> subjectName2 = Utils.ParseDistinguishedName(subjectName);
+                    List<string> subjectName2 = Utils.ParseDistinguishedName(subjectName);
 
-                        if (Utils.CompareDistinguishedName(certificate, subjectName2))
-                        {
-                            return certificate;
-                        }
+                    if (Utils.CompareDistinguishedName(certificate, subjectName2))
+                    {
+                        return certificate;
                     }
                 }
 
@@ -333,10 +324,7 @@ namespace Opc.Ua
                 {
                     if (Utils.CompareDistinguishedName(certificate, subjectName2))
                     {
-                        if (!needPrivateKey || certificate.HasPrivateKey)
-                        {
-                            return certificate;
-                        }
+                        return certificate;
                     }
                 }
 
@@ -344,10 +332,7 @@ namespace Opc.Ua
 
                 foreach (X509Certificate2 certificate in collection)
                 {
-                    if (!needPrivateKey || certificate.HasPrivateKey)
-                    {
-                        return certificate;
-                    }
+                    return certificate;
                 }
             }
 
@@ -521,15 +506,6 @@ namespace Opc.Ua
             }
 
             return null;
-        }
-
-        /// <summary>
-        /// Whether the store supports private keys.
-        /// </summary>
-        /// <value></value>
-        public bool SupportsPrivateKeys
-        {
-            get { return false; }
         }
 
         /// <summary>

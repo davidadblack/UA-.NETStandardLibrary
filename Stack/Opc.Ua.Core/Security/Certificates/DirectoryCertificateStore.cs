@@ -77,7 +77,7 @@ namespace Opc.Ua
 
         #region ICertificateStore Members
         /// <summary cref="ICertificateStore.Open(string)" />
-        public void Open(string location)
+        public virtual void Open(string location)
         {
             lock (m_lock)
             {
@@ -89,7 +89,7 @@ namespace Opc.Ua
         }
 
         /// <summary cref="ICertificateStore.Close()" />
-        public void Close()
+        public virtual void Close()
         {
             lock (m_lock)
             {
@@ -102,7 +102,7 @@ namespace Opc.Ua
         }
 
         /// <summary cref="ICertificateStore.Enumerate()" />
-        public Task<X509Certificate2Collection> Enumerate()
+        public virtual Task<X509Certificate2Collection> Enumerate()
         {
             lock (m_lock)
             {
@@ -126,7 +126,7 @@ namespace Opc.Ua
         }
 
         /// <summary cref="ICertificateStore.Add(X509Certificate2)" />
-        public Task Add(X509Certificate2 certificate)
+        public virtual Task Add(X509Certificate2 certificate)
         {
             if (certificate == null) throw new ArgumentNullException("certificate");
          
@@ -168,7 +168,7 @@ namespace Opc.Ua
         }
 
         /// <summary cref="ICertificateStore.Delete(string)" />
-        public Task<bool> Delete(string thumbprint)
+        public virtual Task<bool> Delete(string thumbprint)
         {
             lock (m_lock)
             {
@@ -201,7 +201,7 @@ namespace Opc.Ua
         }
 
         /// <summary cref="ICertificateStore.FindByThumbprint(string)" />
-        public Task<X509Certificate2Collection> FindByThumbprint(string thumbprint)
+        public virtual Task<X509Certificate2Collection> FindByThumbprint(string thumbprint)
         {
             X509Certificate2Collection certificates = new X509Certificate2Collection();
 
@@ -224,57 +224,10 @@ namespace Opc.Ua
             }
         }
         
-        /// <summary cref="ICertificateStore.SupportsPrivateKeys" />
-        public bool SupportsPrivateKeys
-        {
-            get
-            {
-                return true;
-            }
-        }
-
-        /// <summary>
-        /// Gets the CRL file paths.
-        /// </summary>
-        /// <param name="thumbprint">The certificate thumbprint.</param>
-        /// <returns></returns>
-        public string[] GetCrlFilePaths(string thumbprint)
-        {
-            List<string> filePaths = new List<string>();
-
-            Entry entry = Find(thumbprint);
-
-            DirectoryInfo info = new DirectoryInfo(this.Directory.FullName + Path.DirectorySeparatorChar + "crl");
-
-            foreach (FileInfo file in info.GetFiles("*.crl"))
-            {
-                X509CRL crl = null;
-
-                try
-                {
-                    crl = new X509CRL(file.FullName);
-                }
-                catch (Exception e)
-                {
-                    Utils.Trace(e, "Could not parse CRL file.");
-                    continue;
-                }
-
-                if (!Utils.CompareDistinguishedName(crl.Issuer, entry.Certificate.Subject))
-                {
-                    continue;
-                }
-
-                filePaths.Add(file.FullName);
-            }
-
-            return filePaths.ToArray();
-        }
-
         /// <summary>
         /// Loads the private key from a PFX file in the certificate store.
         /// </summary>
-        public X509Certificate2 LoadPrivateKey(string thumbprint, string subjectName, string password)
+        public virtual X509Certificate2 LoadApplicationCertificate(string thumbprint, string subjectName, string password)
         {
             if (m_certificateSubdir == null || !m_certificateSubdir.Exists)
             {
@@ -319,8 +272,8 @@ namespace Opc.Ua
                     filePath.Append(fileRoot);
 
                     FileInfo privateKeyFile = new FileInfo(filePath.ToString() + ".pfx");
-                    RSA rsa = null;
 
+                    RSA rsa = null;
                     try
                     {
                         certificate = new X509Certificate2(
@@ -361,12 +314,12 @@ namespace Opc.Ua
         /// <summary>
         /// Whether the store support CRLs.
         /// </summary>
-        public bool SupportsCRLs { get { return true; } }
+        public virtual bool SupportsCRLs { get { return true; } }
 
         /// <summary>
         /// Checks if issuer has revoked the certificate.
         /// </summary>
-        public StatusCode IsRevoked(X509Certificate2 issuer, X509Certificate2 certificate)
+        public virtual StatusCode IsRevoked(X509Certificate2 issuer, X509Certificate2 certificate)
         {
             if (issuer == null)
             {
@@ -434,7 +387,7 @@ namespace Opc.Ua
         /// <summary>
         /// Returns the CRLs in the store.
         /// </summary>
-        public List<X509CRL> EnumerateCRLs()
+        public virtual List<X509CRL> EnumerateCRLs()
         {
             List<X509CRL> crls = new List<X509CRL>();
 
@@ -456,7 +409,7 @@ namespace Opc.Ua
         /// <summary>
         /// Returns the CRLs for the issuer.
         /// </summary>
-        public List<X509CRL> EnumerateCRLs(X509Certificate2 issuer)
+        public virtual List<X509CRL> EnumerateCRLs(X509Certificate2 issuer)
         {
             if (issuer == null)
             {
@@ -497,7 +450,7 @@ namespace Opc.Ua
         /// <summary>
         /// Adds a CRL to the store.
         /// </summary>
-        public async void AddCRL(X509CRL crl)
+        public virtual async void AddCRL(X509CRL crl)
         {
             if (crl == null)
             {
@@ -543,7 +496,7 @@ namespace Opc.Ua
         /// <summary>
         /// Removes a CRL from the store.
         /// </summary>
-        public bool DeleteCRL(X509CRL crl)
+        public virtual bool DeleteCRL(X509CRL crl)
         {
             if (crl == null)
             {
@@ -574,13 +527,18 @@ namespace Opc.Ua
 
             return false;
         }
+
+        public virtual RSA GetRSACSP(X509Certificate2 encryptingCertificate)
+        {
+            return encryptingCertificate.GetRSAPrivateKey();
+        }
 #endregion
 
 #region Private Methods
         /// <summary>
         /// Reads the current contents of the directory from disk.
         /// </summary>
-        protected IDictionary<string, Entry> Load(string thumbprint)
+        protected virtual IDictionary<string, Entry> Load(string thumbprint)
         {
             lock (m_lock)
             {

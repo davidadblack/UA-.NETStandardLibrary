@@ -183,7 +183,7 @@ namespace Opc.Ua
             
             if (certificate == null)
             {   
-                certificate = CertificateFactory.Create(m_certificateData, true);
+                certificate = new X509Certificate2(m_certificateData);
             }
             
             SignatureData signatureData = SecurityPolicies.Sign(
@@ -205,7 +205,7 @@ namespace Opc.Ua
             
             if (certificate == null)
             {   
-                certificate = CertificateFactory.Create(m_certificateData, true);
+                certificate = new X509Certificate2(m_certificateData);
             }          
             
             bool valid = SecurityPolicies.Verify(

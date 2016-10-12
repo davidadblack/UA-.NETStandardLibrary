@@ -9,6 +9,7 @@
       "type": "platform",
       "version": "1.0.1"
     },
+    "Portable.BouncyCastle": "1.8.1.1",
     "TSS.Net": "1.0.0-*"
   },
 

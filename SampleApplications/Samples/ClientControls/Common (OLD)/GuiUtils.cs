@@ -214,7 +214,7 @@ namespace Opc.Ua.Client.Controls
             buffer.AppendFormat("Issuer: {0}\r\n", (e.Certificate.Subject == e.Certificate.Issuer) ? "Self-signed" : e.Certificate.Issuer);
             buffer.AppendFormat("Thumbprint: {0}\r\n\r\n", e.Certificate.Thumbprint);
 
-            buffer.AppendFormat("Accept anyways?");
+            buffer.AppendFormat("Accept anyway?");
             MessageDlg dialog = new MessageDlg(buffer.ToString(), MessageDlgButton.Yes, MessageDlgButton.No);
             MessageDlgButton result = await dialog.ShowAsync();
             if (result == MessageDlgButton.Yes)

@@ -410,8 +410,8 @@ namespace Opc.Ua
 
             SecurityConfiguration.Validate();
 
-            // load private key
-            await SecurityConfiguration.ApplicationCertificate.LoadPrivateKey(null);
+            // load app cert
+            await SecurityConfiguration.ApplicationCertificate.LoadApplicationCertificate(null);
 
             //  generate a default uri if null
             if (String.IsNullOrEmpty(ApplicationUri))

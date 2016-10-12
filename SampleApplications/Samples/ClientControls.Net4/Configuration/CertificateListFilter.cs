@@ -143,15 +143,6 @@ namespace Opc.Ua.Client.Controls
                     }
                 }
 
-                // check for private key.
-                if (m_privateKey)
-                {
-                    if (!certificate.HasPrivateKey)
-                    {
-                        return false;
-                    }
-                }
-
                 if (m_certificateTypes != null)
                 {
                     // determine if a CA certificate.

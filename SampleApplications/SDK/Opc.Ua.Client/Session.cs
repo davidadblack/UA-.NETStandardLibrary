@@ -175,16 +175,6 @@ namespace Opc.Ua.Client
                         m_configuration.SecurityConfiguration.ApplicationCertificate.Thumbprint);
                 }
 
-                // check for private key.
-                if (!m_instanceCertificate.HasPrivateKey)
-                {
-                    throw ServiceResultException.Create(
-                        StatusCodes.BadConfigurationError,
-                        "Do not have a privat key for the application instance certificate. Subject={0}, Thumbprint={1}.",
-                        m_instanceCertificate.Subject,
-                        m_instanceCertificate.Thumbprint);
-                }
-
                 // load certificate chain
                 m_instanceCertificateChain = new X509Certificate2Collection(m_instanceCertificate);
                 List<CertificateIdentifier> issuers = new List<CertificateIdentifier>();

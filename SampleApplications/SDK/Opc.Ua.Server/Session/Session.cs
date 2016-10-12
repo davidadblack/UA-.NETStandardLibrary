@@ -988,7 +988,7 @@ namespace Opc.Ua.Server
                 // decrypt the token.
                 if (m_serverCertificate == null)
                 {
-                    m_serverCertificate = CertificateFactory.Create(m_endpoint.ServerCertificate, true);
+                    m_serverCertificate = new X509Certificate2(m_endpoint.ServerCertificate);
 
                     // check for valid certificate.
                     if (m_serverCertificate == null)

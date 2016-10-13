@@ -12,6 +12,7 @@
 
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Generators;
+using Org.BouncyCastle.Math;
 using Org.BouncyCastle.OpenSsl;
 using Org.BouncyCastle.Security;
 using System;
@@ -22,9 +23,6 @@ using Windows.UI.Xaml.Controls;
 
 namespace ProvisionTPMUWP
 {
-    /// <summary>
-    /// An empty page that can be used on its own or navigated to within a Frame.
-    /// </summary>
     public sealed partial class MainPage : Page
     {
         public MainPage()
@@ -56,21 +54,30 @@ namespace ProvisionTPMUWP
                 // Clean up the slot
                 tpm[ownerAuth]._AllowErrors().NvUndefineSpace(TpmHandle.RhOwner, nvHandle);
                 
-                // Export keys
+                // Export serial number, the "valid from" date (the cert will be valid for 1 year, so no need to store that date, too!), the size of the keys blob and the keys themselves
                 TextWriter textWriter = new StringWriter();
                 PemWriter pemWriter = new PemWriter(textWriter);
                 pemWriter.WriteObject(keys);
                 pemWriter.Writer.Flush();
                 byte[] rawData = Encoding.ASCII.GetBytes(textWriter.ToString().ToCharArray());
-                ushort size = (ushort) (rawData.Length + 4 + 64);
+
+                ushort size = (ushort) (sizeof(long) + sizeof(long) + rawData.Length + sizeof(int) + 64);
+                ushort offset = 0;
 
                 // Define a slot for the keys, which is 64 bytes bigger than we need as we write in 64-byte chunks
                 tpm[ownerAuth].NvDefineSpace(TpmHandle.RhOwner, ownerAuth, new NvPublic(nvHandle, TpmAlgId.Sha256, NvAttr.Authread | NvAttr.Authwrite, new byte[0], size));
 
-                // Write the size of the keys (4 bytes)
-                ushort offset = 0;
+                // Write the serial number
+                tpm[ownerAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(BigInteger.ProbablePrime(120, new Random()).LongValue), offset);
+                offset += sizeof(long);
+
+                // Write the "valid from" date (today) in FileTime format
+                tpm[ownerAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(DateTime.Today.ToFileTime()), offset);
+                offset += sizeof(long);
+
+                // Write the size of the keys
                 tpm[ownerAuth].NvWrite(nvHandle, nvHandle, BitConverter.GetBytes(rawData.Length), offset);
-                offset += 4;
+                offset += sizeof(int);
 
                 // Write the keys themselves (in 64-byte chunks)
                 byte[] dataToWrite = new byte[64];
@@ -97,7 +104,7 @@ namespace ProvisionTPMUWP
 
                 tpm.Dispose();
 
-                this.textBlock.Text += "Keys successfully copied to TPM. Hashcode=" + hashcode.ToString();
+                this.textBlock.Text += "Keys successfully generated and copied to TPM. Hashcode=" + hashcode.ToString();
             }
             catch (Exception e)
             {

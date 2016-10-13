@@ -137,11 +137,21 @@ namespace Opc.Ua
                 // Create a handle based on the hash of the keys
                 ushort slotIndex = ushort.Parse(thumbprint);
                 TpmHandle nvHandle = TpmHandle.NV(slotIndex);
+                ushort offset = 0;
+
+                // Read the serial number
+                byte[] serialNumber = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, sizeof(long), offset);
+                offset += sizeof(long);
+
+                // Read the "valid from" date (today) in FileTime format
+                byte[] validFrom = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, sizeof(long), offset);
+                offset += sizeof(long);
 
                 // Read size of keys from NV storage (located in the first 4 bytes)
-                byte[] certSizeBlob = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, 4, 0);
-                
-                // Load keys from NV storage in 64-byte chunks
+                byte[] certSizeBlob = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, sizeof(int), offset);
+                offset += sizeof(int);
+
+                // Read keys from NV storage in 64-byte chunks
                 int certSize = BitConverter.ToInt32(certSizeBlob, 0);
                 byte[] rawData = new byte[certSize];
                 ushort index = 0;
@@ -157,8 +167,9 @@ namespace Opc.Ua
                         sizeToRead = 64;
                     }
 
-                    byte[] dataToRead = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, sizeToRead, (ushort)(index + 4));
-                    
+                    byte[] dataToRead = m_tpm[m_ownerAuth].NvRead(nvHandle, nvHandle, sizeToRead, offset);
+                    offset += sizeToRead;
+
                     for (int i = 0; i < sizeToRead; i++)
                     {
                         rawData[index + i] = dataToRead[i];
@@ -173,15 +184,16 @@ namespace Opc.Ua
                 AsymmetricCipherKeyPair keys = (AsymmetricCipherKeyPair) pemReader.ReadObject();
 
                 X509Name CN = new X509Name("CN="+ subjectName + ",DC=" + Utils.GetHostName());
-                BigInteger SN = BigInteger.ProbablePrime(120, new Random());
+                BigInteger SN = new BigInteger(serialNumber).Abs();
+                DateTime validFromDate = DateTime.FromFileTime(BitConverter.ToInt64(validFrom, 0));
 
                 // Certificate Generator
                 X509V3CertificateGenerator cGenerator = new X509V3CertificateGenerator();
                 cGenerator.SetSerialNumber(SN);
                 cGenerator.SetSubjectDN(CN);
                 cGenerator.SetIssuerDN(CN);
-                cGenerator.SetNotBefore(DateTime.Today.Subtract(new TimeSpan(7, 0, 0, 0))); // a week ago
-                cGenerator.SetNotAfter(DateTime.Today.AddYears(1)); // a year from now
+                cGenerator.SetNotBefore(validFromDate);
+                cGenerator.SetNotAfter(validFromDate.AddYears(1));
                 cGenerator.SetPublicKey(keys.Public);
                 cGenerator.AddExtension(X509Extensions.ExtendedKeyUsage, true, new ExtendedKeyUsage(new List<DerObjectIdentifier>() { new DerObjectIdentifier("1.3.6.1.5.5.7.3.1") }));
                 cGenerator.AddExtension(X509Extensions.AuthorityKeyIdentifier.Id, false, new AuthorityKeyIdentifier(SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(keys.Public), new GeneralNames(new GeneralName(CN)), SN));

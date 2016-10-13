@@ -9,6 +9,6 @@
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <TextBlock x:Name="textBlock" TextWrapping="Wrap" Text="Status: " HorizontalAlignment="Center" VerticalAlignment="Bottom" Height="119" Width="1110" Margin="85,0"/>
-        <Button x:Name="button" Content="Pick a certificate" HorizontalAlignment="Center" VerticalAlignment="Center" Height="100" Width="200" Click="button_Click"/>
+        <Button x:Name="button" Content="Click here to provision TPM" HorizontalAlignment="Center" VerticalAlignment="Center" Height="100" Width="200" Click="button_Click"/>
     </Grid>
 </Page>

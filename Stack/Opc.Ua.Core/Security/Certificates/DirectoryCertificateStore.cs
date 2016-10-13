@@ -26,37 +26,37 @@ namespace Opc.Ua
     public class DirectoryCertificateStore : ICertificateStore
     {
         #region Constructors
+        private static DirectoryCertificateStore m_instance = null;
+        
+        public static ICertificateStore Instance
+        {
+            get
+            {
+                if (m_instance == null)
+                {
+                    lock (m_lock)
+                    {
+                        if (m_instance == null)
+                        {
+                            m_instance = new DirectoryCertificateStore();
+                            Utils.CurrentCertificateStore = m_instance;
+                        }
+                    }
+                }
+
+                return m_instance;
+            }
+        }
+
         /// <summary>
         /// Initializes a store with the specified directory path.
         /// </summary>
-        public DirectoryCertificateStore()
+        protected DirectoryCertificateStore()
         {
             m_certificates = new Dictionary<string, Entry>();
         }
         #endregion
         
-        #region IDisposable Members
-        /// <summary>
-        /// May be called by the application to clean up resources.
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(true);
-        }
-
-        /// <summary>
-        /// Cleans up all resources held by the object.
-        /// </summary>
-        protected virtual void Dispose(bool disposing)
-        {
-            // clean up managed resources.
-            if (disposing)
-            {
-                Close();
-            }
-        }
-        #endregion
-
         #region Public Properties
         /// <summary>
         /// The directory containing the certificate store.
@@ -227,7 +227,7 @@ namespace Opc.Ua
         /// <summary>
         /// Loads the private key from a PFX file in the certificate store.
         /// </summary>
-        public virtual X509Certificate2 LoadApplicationCertificate(string thumbprint, string subjectName, string password)
+        public virtual X509Certificate2 LoadApplicationCertificate(string thumbprint, string subjectName, string applicationURI, string password)
         {
             if (m_certificateSubdir == null || !m_certificateSubdir.Exists)
             {
@@ -782,7 +782,7 @@ namespace Opc.Ua
             public X509Certificate2 CertificateWithPrivateKey;
         }
 
-        protected object m_lock = new object();
+        protected static object m_lock = new object();
 
         private DirectoryInfo m_directory;
         private DirectoryInfo m_certificateSubdir;

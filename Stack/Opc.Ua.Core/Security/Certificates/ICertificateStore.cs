@@ -21,7 +21,7 @@ namespace Opc.Ua
 	/// <summary>
     /// An abstract interface to certficate stores.
     /// </summary>
-	public interface ICertificateStore : IDisposable
+	public interface ICertificateStore
     {
         /// <summary>
         /// Opens the store at the specified location.
@@ -30,7 +30,7 @@ namespace Opc.Ua
         /// <remarks>
         /// The syntax depends on the store implementation.
         /// </remarks>
-		void Open(string location);
+       void Open(string location);
 
         /// <summary>
         /// Closes the store.
@@ -47,6 +47,8 @@ namespace Opc.Ua
         /// </summary>
         /// <param name="certificate">The certificate.</param>
         Task Add(X509Certificate2 certificate);
+
+        X509Certificate2 LoadApplicationCertificate(string thumbprint, string subjectName, string applicationURI, string password);
 
         /// <summary>
         /// Deletes a certificate from the store.

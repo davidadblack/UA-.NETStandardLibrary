@@ -410,9 +410,6 @@ namespace Opc.Ua
 
             SecurityConfiguration.Validate();
 
-            // load app cert
-            await SecurityConfiguration.ApplicationCertificate.LoadApplicationCertificate(null);
-
             //  generate a default uri if null
             if (String.IsNullOrEmpty(ApplicationUri))
             {
@@ -426,6 +423,9 @@ namespace Opc.Ua
                 m_applicationUri = buffer.ToString();
             }
 
+            // load app cert
+            await SecurityConfiguration.ApplicationCertificate.LoadApplicationCertificate(m_applicationUri, null);
+                     
             if (applicationType == ApplicationType.Client || applicationType == ApplicationType.ClientAndServer)
             {
                 if (ClientConfiguration == null)

@@ -35,6 +35,30 @@ namespace Opc.Ua
     /// </summary>
     public class TPMCertificateStore : DirectoryCertificateStore
     {
+        private static TPMCertificateStore m_instance = null;
+
+        public new static ICertificateStore Instance
+        {
+            get
+            {
+                if (m_instance == null)
+                {
+                    lock (m_lock)
+                    {
+                        if (m_instance == null)
+                        {
+                            m_instance = new TPMCertificateStore();
+                            Utils.CurrentCertificateStore = m_instance;
+                        }
+                    }
+                }
+
+                return m_instance;
+            }
+        }
+
+        private TPMCertificateStore() { }
+
         public override void Open(string location)
         {
             lock (m_lock)
@@ -77,7 +101,7 @@ namespace Opc.Ua
                 }
                 catch (Exception e)
                 {
-                    Utils.Trace(e, "Could not add application certificate thumprint to TPM MV storage!");
+                    Utils.Trace(e, "Could not add application certificate thumprint to TPM NV storage!");
                 }
             }
 
@@ -99,14 +123,14 @@ namespace Opc.Ua
                 }
                 catch (Exception e)
                 {
-                    Utils.Trace(e, "Could not delete application certificate thumprint from TPM MV storage!");
+                    Utils.Trace(e, "Could not delete application certificate thumprint from TPM NV storage!");
                 }
             }
 
             return base.Delete(thumbprint);
         }
    
-        public override X509Certificate2 LoadApplicationCertificate(string thumbprint, string subjectName, string password)
+        public override X509Certificate2 LoadApplicationCertificate(string thumbprint, string subjectName, string applicationURI, string password)
         {
             try
             {
@@ -156,11 +180,12 @@ namespace Opc.Ua
                 cGenerator.SetSerialNumber(SN);
                 cGenerator.SetSubjectDN(CN);
                 cGenerator.SetIssuerDN(CN);
-                cGenerator.SetNotBefore(DateTime.Now.Subtract(new TimeSpan(7, 0, 0, 0))); // a week ago
-                cGenerator.SetNotAfter(DateTime.Now.AddYears(1)); // a year from now
+                cGenerator.SetNotBefore(DateTime.Today.Subtract(new TimeSpan(7, 0, 0, 0))); // a week ago
+                cGenerator.SetNotAfter(DateTime.Today.AddYears(1)); // a year from now
                 cGenerator.SetPublicKey(keys.Public);
                 cGenerator.AddExtension(X509Extensions.ExtendedKeyUsage, true, new ExtendedKeyUsage(new List<DerObjectIdentifier>() { new DerObjectIdentifier("1.3.6.1.5.5.7.3.1") }));
                 cGenerator.AddExtension(X509Extensions.AuthorityKeyIdentifier.Id, false, new AuthorityKeyIdentifier(SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(keys.Public), new GeneralNames(new GeneralName(CN)), SN));
+                cGenerator.AddExtension(X509Extensions.SubjectAlternativeName, false, new GeneralNames(new GeneralName(GeneralName.UniformResourceIdentifier, applicationURI)));
 
                 ISignatureFactory signatureFactory = new Asn1SignatureFactory("SHA1withRSA", keys.Private, new SecureRandom());
                 Org.BouncyCastle.X509.X509Certificate cert = cGenerator.Generate(signatureFactory);
@@ -242,7 +267,7 @@ namespace Opc.Ua
                 }
                 catch (Exception e)
                 {
-                    Utils.Trace(e, "Could not check application certificate thumprint in TPM MV storage!");
+                    Utils.Trace(e, "Could not check application certificate thumprint in TPM NV storage!");
                 }
             }
 

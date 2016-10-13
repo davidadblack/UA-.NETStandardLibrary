@@ -145,7 +145,7 @@ namespace Opc.Ua
         /// <value>The X509 certificate used by this instance.</value>
         public X509Certificate2 Certificate
         {
-            get { return m_certificate;  }
+            get { return m_certificate; }
             set { m_certificate = value; }
         }
 
@@ -160,29 +160,25 @@ namespace Opc.Ua
         /// <summary>
         /// Loads the application certificate with an optional password.
         /// </summary>
-        public async Task<X509Certificate2> LoadApplicationCertificate(String password)
+        public async Task<X509Certificate2> LoadApplicationCertificate(string applicationURI, string password)
         {
             if (this.StoreType == CertificateStoreType.Directory)
-            {                
-                using (DirectoryCertificateStore store = new DirectoryCertificateStore())
-                {
-                    store.Open(this.StorePath);
-                    m_certificate = store.LoadApplicationCertificate(this.Thumbprint, this.SubjectName, password);
-                    return m_certificate;
-                }
-            }
-
-            if (this.StoreType == CertificateStoreType.TPM)
             {
-                using (TPMCertificateStore store = new TPMCertificateStore())
-                {
-                    store.Open(this.StorePath);
-                    m_certificate = store.LoadApplicationCertificate(this.Thumbprint, this.SubjectName, password);
-                    return m_certificate;
-                }
+                DirectoryCertificateStore.Instance.Open(this.StorePath);
+                m_certificate = DirectoryCertificateStore.Instance.LoadApplicationCertificate(this.Thumbprint, this.SubjectName, applicationURI, password);
+                return m_certificate;
             }
+            else if (this.StoreType == CertificateStoreType.TPM)
+            {
 
-            return await Find(true);
+                TPMCertificateStore.Instance.Open(this.StorePath);
+                m_certificate = TPMCertificateStore.Instance.LoadApplicationCertificate(this.Thumbprint, this.SubjectName, applicationURI, password);
+                return m_certificate;
+            }
+            else
+            {
+                return await Find(true);
+            }
         }
 
         /// <summary>
@@ -203,19 +199,19 @@ namespace Opc.Ua
             else
             {
                 // open store.
-                using (ICertificateStore store = CertificateStoreIdentifier.CreateStore(StoreType))
+                ICertificateStore store = CertificateStoreIdentifier.PickStore(StoreType);
+                
+                store.Open(StorePath);
+
+                X509Certificate2Collection collection = await store.Enumerate();
+
+                certificate = Find(collection, m_thumbprint, m_subjectName, needPrivateKey);
+
+                if (certificate != null)
                 {
-                    store.Open(StorePath);
-
-                    X509Certificate2Collection collection = await store.Enumerate();
-
-                    certificate = Find(collection, m_thumbprint, m_subjectName, needPrivateKey);
-
-                    if (certificate != null)
-                    {
-                        m_certificate = certificate;
-                    }
+                    m_certificate = certificate;
                 }
+                
             }
 
             return certificate;

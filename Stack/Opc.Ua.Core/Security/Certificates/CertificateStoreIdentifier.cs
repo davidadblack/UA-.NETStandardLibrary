@@ -89,7 +89,7 @@ namespace Opc.Ua
         /// <summary>
         /// Returns an object that can be used to access the store.
         /// </summary>
-        public static ICertificateStore CreateStore(string storeType)
+        public static ICertificateStore PickStore(string storeType)
         {
             ICertificateStore store = null;
 
@@ -102,17 +102,15 @@ namespace Opc.Ua
             {
                 case CertificateStoreType.Directory:
                 {
-                    store = new DirectoryCertificateStore();
+                    store = DirectoryCertificateStore.Instance;
                     break;
                 }
                 case CertificateStoreType.TPM:
                 {
-                    store = new TPMCertificateStore();
+                    store = TPMCertificateStore.Instance;
                     break;
                 }
             }
-
-            Utils.CurrentCertificateStore = store;
 
             return store;
         }
@@ -122,7 +120,7 @@ namespace Opc.Ua
         /// </summary>
         public ICertificateStore OpenStore()
         {
-            ICertificateStore store = CreateStore(this.StoreType);
+            ICertificateStore store = PickStore(this.StoreType);
             store.Open(this.StorePath);
             return store;
         }

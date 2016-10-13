@@ -312,19 +312,18 @@ namespace Opc.Ua.Client.Controls
                         return;
                     }
 
-                    using (ICertificateStore store = id.OpenStore())
+                    ICertificateStore store = id.OpenStore();
+                    
+                    for (int ii = 0; ii < certificates.Length; ii++)
                     {
-                        for (int ii = 0; ii < certificates.Length; ii++)
-                        {
-                            X509Certificate2 certificate = certificates[ii] as X509Certificate2;
+                        X509Certificate2 certificate = certificates[ii] as X509Certificate2;
 
-                            if (certificate != null)
-                            {
-                                store.Add(certificate);
-                            }
+                        if (certificate != null)
+                        {
+                            store.Add(certificate);
                         }
                     }
-
+                    
                     NodesTV.SelectedNode = node;
                     return;
                 }
@@ -484,10 +483,8 @@ namespace Opc.Ua.Client.Controls
                     {
                         CertificateStoreIdentifier storeId = info.GetCertificateStore();
 
-                        using (ICertificateStore store = storeId.OpenStore())
-                        {
-                            store.Add(id.Certificate);
-                        }
+                        ICertificateStore store = storeId.OpenStore();
+                        store.Add(id.Certificate);
                     }
 
                     SelectNode();

@@ -232,7 +232,6 @@ namespace Opc.Ua
                 m_RSAParams.Exponent = new byte[keyParams.PublicExponent.ToByteArrayUnsigned().Length];
                 keyParams.PublicExponent.ToByteArrayUnsigned().CopyTo(m_RSAParams.Exponent, 0);
 
-
                 rsa.ImportParameters(m_RSAParams);
                 if (rsa != null)
                 {

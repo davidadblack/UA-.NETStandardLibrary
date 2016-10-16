@@ -184,7 +184,7 @@ namespace Opc.Ua
                 }
                 else
                 {
-                    X509Certificate2 cert = CertificateFactory.Create(x509Token.CertificateData, true);
+                    X509Certificate2 cert = new X509Certificate2(x509Token.CertificateData);
                     m_displayName = cert.Subject;
                 }
                 return;
